@@ -7,6 +7,7 @@
 
 const App = (() => {
   let currentSort = 'composite';
+  let allShopsCache = [];     // 原始店铺数据（未排序），排序切换时直接用缓存
   let rankedShops = [];
   let currentShop = null;
   let isLocating = false;
@@ -169,11 +170,11 @@ const App = (() => {
     RenderModule.renderLoadingState(userLocation, isManual);
     window.scrollTo({ top: 0, behavior: 'instant' });
 
-    // 加载真实数据
-    var allShops = await loadShopsForLocation(userLocation.lat, userLocation.lng);
+    // 加载真实数据 + 缓存原始数据（排序切换时不再重新请求API）
+    allShopsCache = await loadShopsForLocation(userLocation.lat, userLocation.lng);
 
     // 排名和渲染
-    rankedShops = RankingModule.rankShops(allShops, currentSort);
+    rankedShops = RankingModule.rankShops(allShopsCache, currentSort);
     RenderModule.renderShopList(rankedShops, userLocation, hasError, currentSort, isManual, addressText, poiCount, manualCount);
     bindListEvents();
 
@@ -196,6 +197,7 @@ const App = (() => {
     currentSort = 'composite';
     addressText = '';
     rankedShops = [];
+    allShopsCache = [];
     RenderModule.renderWelcomeScreen();
     bindWelcomeEvents();
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -370,13 +372,13 @@ const App = (() => {
    * 绑定列表页事件
    */
   function bindListEvents() {
-    // 排序切换
+    // 排序切换（直接从缓存重排，无需请求API）
     document.querySelectorAll('.sort-tab').forEach((tab) => {
       tab.addEventListener('click', () => {
         const sortMode = tab.dataset.sort;
         if (sortMode === currentSort) return;
         currentSort = sortMode;
-        refreshList();
+        refreshSort();
       });
     });
 
@@ -498,12 +500,26 @@ const App = (() => {
     refreshList();
   }
 
+  /**
+   * 仅切换排序（直接使用缓存数据，无需请求API，瞬间响应）
+   */
+  function refreshSort() {
+    if (!allShopsCache.length) return;
+    var userLocation = LocationModule.getUserLocation();
+    var hasError = LocationModule.hasLocationError();
+    var isManual = LocationModule.getIsManual();
+    rankedShops = RankingModule.rankShops(allShopsCache, currentSort);
+    RenderModule.renderShopList(rankedShops, userLocation, hasError, currentSort, isManual, addressText, poiCount, manualCount);
+    bindListEvents();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   async function refreshList() {
     var userLocation = LocationModule.getUserLocation();
     var hasError = LocationModule.hasLocationError();
     var isManual = LocationModule.getIsManual();
-    var allShops = await loadShopsForLocation(userLocation.lat, userLocation.lng);
-    rankedShops = RankingModule.rankShops(allShops, currentSort);
+    allShopsCache = await loadShopsForLocation(userLocation.lat, userLocation.lng);
+    rankedShops = RankingModule.rankShops(allShopsCache, currentSort);
     RenderModule.renderShopList(rankedShops, userLocation, hasError, currentSort, isManual, addressText, poiCount, manualCount);
     bindListEvents();
     window.scrollTo({ top: 0, behavior: 'smooth' });
