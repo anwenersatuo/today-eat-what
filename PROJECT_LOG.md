@@ -178,13 +178,23 @@ data.js → location.js → ranking.js → render.js → map-picker.js → app.j
 5. **技术优先**：纯前端、零依赖（Leaflet 除外）、手机风格 UI
 6. **代码风格**：匹配代码小白的理解能力，注释充分
 
+## 线上部署
+
+- **GitHub 仓库**：https://github.com/anwenersatuo/today-eat-what
+- **线上网址**：https://anwenersatuo.github.io/today-eat-what/
+- **部署方式**：GitHub Pages + GitHub Actions（`.github/workflows/static.yml`）
+- **更新方式**：`git push origin main` → 自动部署
+
 ## 当前状态（2026-06-20）
 
 ✅ 已完成功能：
 - 欢迎页双入口（GPS / 地图选点）
 - 地图选点（Leaflet + 搜索 + Enter 跳转 + 红色图钉居中）
+- 店铺动态散布（跟随用户位置，任何地方都能看到）
 - 店铺列表（综合排名 + 金银铜徽章 + 4 种排序）
 - 店铺详情（好评/差评关键词标签云 + 评论区菜品图片网格 + 图片查看器）
+- 🆕 摇一摇随机推荐（老虎机弹窗 + DeviceMotion 物理摇晃 + 按钮双触发）
+- 🆕 GitHub Pages 上线（推送自动部署）
 - 手机风格 UI + 响应式
 
 🔜 待开发：
@@ -193,3 +203,22 @@ data.js → location.js → ranking.js → render.js → map-picker.js → app.j
 - 菜品类目页
 - 换成真实数据源
 - AI 个性化推荐
+
+## 2026-06-20 更新记录
+
+### 修复：没有商铺的问题
+- **原因**：Mock 店铺坐标固定在北京中关村，异地用户 5km 内无店铺
+- **修复**：`data.js` 新增 `redistributeShopsAround(lat, lng, radiusKm=3)` 函数
+- **调用点**：`app.js → showShopList()` 中，渲染列表前先散布店铺
+
+### 新功能：摇一摇随机推荐
+- **新增文件**：`js/shake.js`（DeviceMotion 摇晃检测，阈值 15，冷却 1.5s，iOS 13+ 权限）
+- **修改文件**：
+  - `css/style.css`：+170 行（按钮脉冲、弹窗弹入 bounceIn、老虎机抖动 slotShake、结果弹跳 landPop）
+  - `js/render.js`：`renderRandomPicker()` + `closeRandomPicker()`（弹窗 DOM 创建/销毁）
+  - `js/app.js`：+150 行（`handleRandomPick`、`runSlotAnimation` 老虎机轮播、`showRandomResult`、`bindRandomEvents`、摇一摇启动/停止管理）
+  - `index.html`：引入 `shake.js`（排在 render 后、map-picker 前）
+- **交互细节**：
+  - 轮播帧：60/60/60/80/80/100/100/100/150/150/200/250/350/500 ms
+  - 弹窗按钮用 `cloneNode+replaceChild` 防事件重复绑定
+  - `isRandomOpen` 标志防重复触发
