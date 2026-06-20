@@ -386,11 +386,12 @@ const App = (() => {
       btnRelocate.addEventListener('click', handleRelocate);
     }
 
-    // 点击店铺卡片
+    // 点击店铺卡片（ID 现在是字符串，如 poi_xxx / manual_xxx / mock_0）
     document.querySelectorAll('.shop-card').forEach((card) => {
       card.addEventListener('click', () => {
-        const shopId = parseInt(card.dataset.shopId);
-        currentShop = rankedShops.find((s) => s.id === shopId);
+        var shopId = card.dataset.shopId;
+        // 兼容旧格式（纯数字ID）和新格式（字符串ID）
+        currentShop = rankedShops.find(function (s) { return String(s.id) === shopId; });
         if (currentShop) showDetail(currentShop);
       });
     });
