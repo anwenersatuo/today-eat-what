@@ -99,7 +99,20 @@ const LocationModule = (() => {
         headers: { 'User-Agent': 'TodayEatWhat/1.0' },
       });
       var data = await resp.json();
-      return data.display_name || lat.toFixed(4) + ', ' + lng.toFixed(4);
+      if (data.display_name) {
+        return data.display_name;
+      }
+      // Nominatim 返回了数据但没有 display_name → 尝试拼接 address 字段
+      if (data.address) {
+        var parts = [];
+        var addr = data.address;
+        if (addr.city || addr.town || addr.county) parts.push(addr.city || addr.town || addr.county);
+        if (addr.district || addr.suburb) parts.push(addr.district || addr.suburb);
+        if (addr.road) parts.push(addr.road);
+        if (addr.house_number) parts.push(addr.house_number);
+        if (parts.length > 0) return parts.join('');
+      }
+      return lat.toFixed(4) + ', ' + lng.toFixed(4);
     } catch (err) {
       console.error('反向地理编码失败：', err);
       return lat.toFixed(4) + ', ' + lng.toFixed(4);

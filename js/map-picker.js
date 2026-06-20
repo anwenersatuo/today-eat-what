@@ -95,9 +95,10 @@ const MapPicker = (() => {
       attributionControl: false,
     });
 
-    // OpenStreetMap 瓦片
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
+    // 高德地图瓦片（国内无需 VPN，OSM 国内被墙）
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+      maxZoom: 18,
+      subdomains: ['1', '2', '3', '4'],
     }).addTo(map);
 
     // 缩放控件放在右下角
