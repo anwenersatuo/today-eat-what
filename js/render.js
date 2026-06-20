@@ -125,12 +125,17 @@ const RenderModule = (() => {
       ? (shop.monthlySales / 1000).toFixed(0) + 'k'
       : shop.monthlySales;
 
+    // 手动收藏的店铺显示徽章
+    var manualBadge = shop.isManual
+      ? '<span class="shop-manual-badge" title="手动收藏的店铺">⭐收藏</span>'
+      : '';
+
     return `
-      <div class="shop-card" data-shop-id="${shop.id}">
+      <div class="shop-card ${shop.isManual ? 'shop-card-manual' : ''}" data-shop-id="${shop.id}">
         <div class="shop-card-header">
           <div class="shop-rank">${getRankBadge(shop.rank)}</div>
           <div class="shop-info">
-            <h3 class="shop-name">${shop.name}</h3>
+            <h3 class="shop-name">${shop.name} ${manualBadge}</h3>
             <div class="shop-meta">
               ${renderStars(shop.rating, 'small')}
               <span class="shop-rating-num">${shop.rating}</span>
@@ -166,13 +171,59 @@ const RenderModule = (() => {
     `;
   }
 
+  /** 渲染「➕ 手动添加店铺」按钮 */
+  function renderAddShopButton() {
+    return `
+      <div class="btn-add-shop-wrap">
+        <button class="btn-add-shop" id="btnAddShop">
+          ➕ 手动添加一家店铺
+        </button>
+      </div>
+    `;
+  }
+
+  /** 渲染列表加载中状态 */
+  function renderLoadingState(userLocation, isManual) {
+    var locIcon = isManual ? '🗺️' : '📍';
+    var locText = isManual ? '手动选址 · 搜索范围 5km' : '已定位 · 搜索范围 5km';
+    return `
+      <div class="page page-list">
+        <header class="app-header">
+          <h1 class="app-title">🍜 今天吃什么</h1>
+          <p class="app-subtitle">正在搜索周边店铺…</p>
+        </header>
+        <div class="location-bar">
+          <div class="location-info">
+            <span class="location-icon">${locIcon}</span>
+            <span class="location-text">${locText}</span>
+          </div>
+        </div>
+        <div class="loading-spinner-wrap">
+          <div class="loading-spinner"></div>
+          <p class="loading-text">🔍 正在从高德地图获取周边餐饮店铺…</p>
+        </div>
+      </div>
+    `;
+  }
+
+  /** 渲染数据来源说明 */
+  function renderDataSourceInfo(poiCount, manualCount) {
+    var parts = [];
+    if (poiCount > 0) parts.push('<span class="ds-badge ds-poi">📡 高德 ' + poiCount + ' 家</span>');
+    if (manualCount > 0) parts.push('<span class="ds-badge ds-manual">⭐ 收藏 ' + manualCount + ' 家</span>');
+    if (!parts.length) return '';
+    return '<div class="data-source-info">' + parts.join(' ') + '</div>';
+  }
+
   /** 渲染完整列表页 */
-  function renderShopList(shops, userLocation, hasError, currentSort, isManual, addressText) {
-    const locBar = renderLocationBar(userLocation, isManual, addressText);
-    const sortTabs = renderSortTabs(currentSort);
-    const summary = renderSummary(shops);
-    const cards = shops.map(renderShopCard).join('');
-    const randomBtn = renderRandomButton();
+  function renderShopList(shops, userLocation, hasError, currentSort, isManual, addressText, poiCount, manualCount) {
+    var locBar = renderLocationBar(userLocation, isManual, addressText);
+    var sortTabs = renderSortTabs(currentSort);
+    var summary = renderSummary(shops);
+    var cards = shops.map(renderShopCard).join('');
+    var randomBtn = renderRandomButton();
+    var addBtn = renderAddShopButton();
+    var dsInfo = renderDataSourceInfo(poiCount || 0, manualCount || 0);
 
     appEl.innerHTML = `
       <div class="page page-list">
@@ -181,6 +232,7 @@ const RenderModule = (() => {
           <p class="app-subtitle">从此告别选择困难症</p>
         </header>
         ${locBar}
+        ${dsInfo}
         ${sortTabs}
         ${randomBtn}
         <div class="shop-list-container">
@@ -188,8 +240,9 @@ const RenderModule = (() => {
           <div class="shop-list">
             ${cards}
           </div>
-          ${shops.length === 0 ? '<div class="empty-state">😢 5公里范围内暂无店铺</div>' : ''}
+          ${shops.length === 0 ? '<div class="empty-state">😢 5公里范围内暂无店铺<br><small>试试移动地图位置，或者手动添加一家</small></div>' : ''}
         </div>
+        ${addBtn}
       </div>
     `;
   }
@@ -389,6 +442,85 @@ const RenderModule = (() => {
     if (el) el.remove();
   }
 
+  // ==================== 手动添加店铺表单 ====================
+
+  /**
+   * 渲染添加店铺弹窗表单
+   * @param {Object} defaultLocation - {lat, lng} 默认坐标
+   * @param {Array} categories - 分类选项列表
+   */
+  function renderAddShopForm(defaultLocation, categories) {
+    var el = document.createElement('div');
+    el.className = 'add-shop-overlay';
+    el.id = 'addShopOverlay';
+
+    var catOptions = (categories || DataModule.CATEGORY_OPTIONS).map(function (c) {
+      return '<option value="' + c + '">' + c + '</option>';
+    }).join('');
+
+    el.innerHTML = `
+      <div class="add-shop-backdrop"></div>
+      <div class="add-shop-card">
+        <div class="add-shop-header">
+          <h3>➕ 添加收藏店铺</h3>
+          <button class="add-shop-close" id="btnAddShopClose">✕</button>
+        </div>
+        <div class="add-shop-body">
+          <div class="add-shop-field">
+            <label>店铺名称 <span class="required">*</span></label>
+            <input type="text" id="addShopName" placeholder="例如：老张黄焖鸡米饭" maxlength="30" />
+          </div>
+          <div class="add-shop-field">
+            <label>分类</label>
+            <select id="addShopCategory">${catOptions}</select>
+          </div>
+          <div class="add-shop-row">
+            <div class="add-shop-field add-shop-half">
+              <label>评分</label>
+              <select id="addShopRating">
+                <option value="5.0">⭐ 5.0</option>
+                <option value="4.5">⭐ 4.5</option>
+                <option value="4.0" selected>⭐ 4.0</option>
+                <option value="3.5">⭐ 3.5</option>
+                <option value="3.0">⭐ 3.0</option>
+              </select>
+            </div>
+            <div class="add-shop-field add-shop-half">
+              <label>人均价格（元）</label>
+              <input type="number" id="addShopPrice" placeholder="25" min="1" max="500" value="25" />
+            </div>
+          </div>
+          <div class="add-shop-field">
+            <label>标签（逗号分隔）</label>
+            <input type="text" id="addShopTags" placeholder="好吃, 分量足, 推荐" maxlength="60" />
+          </div>
+          <div class="add-shop-field">
+            <label>地址描述（可选）</label>
+            <input type="text" id="addShopAddress" placeholder="例如：小区门口左转50米" maxlength="80" />
+          </div>
+          <p class="add-shop-hint">📍 位置将设为当前地图中心点</p>
+        </div>
+        <div class="add-shop-footer">
+          <button class="add-shop-btn-cancel" id="btnAddShopCancel">取消</button>
+          <button class="add-shop-btn-save" id="btnAddShopSave">💾 保存</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(el);
+
+    // 关闭按钮
+    el.querySelector('#btnAddShopClose')?.addEventListener('click', closeAddShopForm);
+    el.querySelector('#btnAddShopCancel')?.addEventListener('click', closeAddShopForm);
+    el.querySelector('.add-shop-backdrop')?.addEventListener('click', closeAddShopForm);
+
+    return el;
+  }
+
+  function closeAddShopForm() {
+    var el = document.getElementById('addShopOverlay');
+    if (el) el.remove();
+  }
+
   // ==================== 图片查看器 ====================
 
   function renderImageViewer(images, currentIndex) {
@@ -428,10 +560,14 @@ const RenderModule = (() => {
   return {
     renderWelcomeScreen,
     renderShopList,
+    renderLoadingState,
     renderShopDetail,
     renderImageViewer,
     renderRandomPicker,
     closeRandomPicker,
     collectReviewImages,
+    renderAddShopForm,
+    closeAddShopForm,
+    renderDataSourceInfo,
   };
 })();

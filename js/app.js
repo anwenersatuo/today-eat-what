@@ -12,6 +12,8 @@ const App = (() => {
   let isLocating = false;
   let isRandomOpen = false;   // 随机弹窗是否打开（防重复触发）
   let addressText = '';       // 手动选址时的地址文字
+  let poiCount = 0;           // 高德 POI 店铺数
+  let manualCount = 0;        // 手动收藏店铺数
 
   function init() {
     RenderModule.renderWelcomeScreen();
@@ -73,24 +75,80 @@ const App = (() => {
   }
 
   /**
-   * 显示店铺列表（统一的列表渲染入口）
+   * 加载指定位置的店铺数据（高德 POI + 手动收藏）
    */
-  function showShopList() {
-    const userLocation = LocationModule.getUserLocation();
-    const hasError = LocationModule.hasLocationError();
-    const isManual = LocationModule.getIsManual();
+  async function loadShopsForLocation(lat, lng) {
+    var allShops = [];
+    var pois = [];
 
-    // 动态散布店铺到用户位置周围（确保任何地方都能看到店铺）
-    if (userLocation) {
-      redistributeShopsAround(userLocation.lat, userLocation.lng);
+    // 1. 从高德获取周边 POI
+    try {
+      pois = await LocationModule.searchNearbyPois(lat, lng, 5);
+    } catch (err) {
+      console.error('高德POI获取异常：', err);
+      pois = [];
     }
 
-    const nearbyShops = LocationModule.filterShopsByDistance(SHOPS);
-    rankedShops = RankingModule.rankShops(nearbyShops, currentSort);
-    RenderModule.renderShopList(rankedShops, userLocation, hasError, currentSort, isManual, addressText);
+    if (pois.length > 0) {
+      // 转换为标准店铺格式
+      allShops = pois.map(function (poi, i) {
+        return DataModule.convertPoiToShop(poi, lat, lng, i);
+      });
+      poiCount = allShops.length;
+    } else {
+      // 高德无结果，使用 Mock 数据兜底
+      console.warn('高德POI无结果，使用兜底Mock数据');
+      allShops = SHOPS.slice();
+      redistributeShopsAround(lat, lng);
+      allShops = LocationModule.filterShopsByDistance(allShops);
+      poiCount = 0;
+    }
+
+    // 2. 加载手动收藏的店铺
+    var manualShops = DataModule.getManualShops(lat, lng);
+    manualCount = manualShops.length;
+
+    // 手动店铺排前面（用 tag 标记）
+    manualShops.forEach(function (s) {
+      s.tags = ['⭐收藏'].concat(s.tags || []);
+    });
+
+    // 合并：手动店铺显示在前面
+    allShops = manualShops.concat(allShops);
+
+    // 确保所有店铺都计算了距离（ranking 模块需要 distance 字段）
+    allShops.forEach(function (shop) {
+      if (shop.distance === undefined) {
+        shop.distance = LocationModule.haversineDistance(lat, lng, shop.lat, shop.lng);
+      }
+    });
+
+    return allShops;
+  }
+
+  /**
+   * 显示店铺列表（统一的列表渲染入口）
+   */
+  async function showShopList() {
+    var userLocation = LocationModule.getUserLocation();
+    var hasError = LocationModule.hasLocationError();
+    var isManual = LocationModule.getIsManual();
+
+    if (!userLocation) return;
+
+    // 显示加载中状态
+    RenderModule.renderLoadingState(userLocation, isManual);
+    window.scrollTo({ top: 0, behavior: 'instant' });
+
+    // 加载真实数据
+    var allShops = await loadShopsForLocation(userLocation.lat, userLocation.lng);
+
+    // 排名和渲染
+    rankedShops = RankingModule.rankShops(allShops, currentSort);
+    RenderModule.renderShopList(rankedShops, userLocation, hasError, currentSort, isManual, addressText, poiCount, manualCount);
     bindListEvents();
 
-    // 启动摇一摇监听（每次进入列表页都重新启动）
+    // 启动摇一摇监听
     if (ShakeModule.isSupported() && !ShakeModule.needsPermission()) {
       ShakeModule.start(handleRandomPick);
     }
@@ -318,14 +376,99 @@ const App = (() => {
         handleRandomPick();
       });
     }
+
+    // ➕ 手动添加店铺按钮
+    var btnAddShop = document.getElementById('btnAddShop');
+    if (btnAddShop) {
+      btnAddShop.addEventListener('click', handleOpenAddShopForm);
+    }
+
+    // 手动收藏店铺上的操作按钮
+    document.querySelectorAll('.shop-card-manual').forEach(function (card) {
+      // 长按或右键删除（移动端用长按）
+      var pressTimer;
+      card.addEventListener('touchstart', function () {
+        pressTimer = setTimeout(function () {
+          var shopId = card.dataset.shopId;
+          handleDeleteManualShop(shopId);
+        }, 800);
+      });
+      card.addEventListener('touchend', function () { clearTimeout(pressTimer); });
+      card.addEventListener('touchmove', function () { clearTimeout(pressTimer); });
+    });
   }
 
-  function refreshList() {
-    const userLocation = LocationModule.getUserLocation();
-    const hasError = LocationModule.hasLocationError();
-    const isManual = LocationModule.getIsManual();
-    rankedShops = RankingModule.rankShops(rankedShops, currentSort);
-    RenderModule.renderShopList(rankedShops, userLocation, hasError, currentSort, isManual, addressText);
+  /**
+   * 打开手动添加店铺表单
+   */
+  function handleOpenAddShopForm() {
+    var userLocation = LocationModule.getUserLocation();
+    RenderModule.renderAddShopForm(userLocation, DataModule.CATEGORY_OPTIONS);
+
+    // 绑定保存按钮
+    var btnSave = document.getElementById('btnAddShopSave');
+    if (btnSave) {
+      btnSave.addEventListener('click', handleSaveManualShop);
+    }
+  }
+
+  /**
+   * 保存手动添加的店铺
+   */
+  function handleSaveManualShop() {
+    var nameEl = document.getElementById('addShopName');
+    var name = nameEl ? nameEl.value.trim() : '';
+
+    if (!name) {
+      alert('请输入店铺名称');
+      nameEl && nameEl.focus();
+      return;
+    }
+
+    var userLocation = LocationModule.getUserLocation();
+
+    var shop = {
+      name: name,
+      category: document.getElementById('addShopCategory')?.value || '其他',
+      rating: parseFloat(document.getElementById('addShopRating')?.value || '4.0'),
+      avgPrice: parseInt(document.getElementById('addShopPrice')?.value || '25'),
+      tags: (document.getElementById('addShopTags')?.value || '收藏')
+        .split(',')
+        .map(function (t) { return t.trim(); })
+        .filter(function (t) { return t; }),
+      address: document.getElementById('addShopAddress')?.value.trim() || '',
+      lat: userLocation ? userLocation.lat : BASE_LAT,
+      lng: userLocation ? userLocation.lng : BASE_LNG,
+      deliveryTime: '30分钟',
+      deliveryFee: 0,
+    };
+
+    DataModule.addManualShop(shop);
+    RenderModule.closeAddShopForm();
+
+    // 刷新列表
+    refreshList();
+  }
+
+  /**
+   * 删除手动收藏的店铺
+   */
+  function handleDeleteManualShop(shopId) {
+    if (!shopId || shopId.indexOf('manual_') !== 0) return;
+    if (!confirm('确定要删除这家收藏的店铺吗？')) return;
+
+    var savedAt = parseInt(shopId.replace('manual_', ''));
+    DataModule.deleteManualShop(savedAt);
+    refreshList();
+  }
+
+  async function refreshList() {
+    var userLocation = LocationModule.getUserLocation();
+    var hasError = LocationModule.hasLocationError();
+    var isManual = LocationModule.getIsManual();
+    var allShops = await loadShopsForLocation(userLocation.lat, userLocation.lng);
+    rankedShops = RankingModule.rankShops(allShops, currentSort);
+    RenderModule.renderShopList(rankedShops, userLocation, hasError, currentSort, isManual, addressText, poiCount, manualCount);
     bindListEvents();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }

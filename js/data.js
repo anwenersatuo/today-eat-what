@@ -1,12 +1,16 @@
-﻿/**
- * Mock 数据 — 今天吃什么
- * 模拟北京中关村附近 5km 范围内的外卖店铺数据
+/**
+ * 数据模块 — 今天吃什么
+ * - Mock 数据（作为高德 API 失败时的兜底）
+ * - 手动收藏店铺（localStorage 持久化）
+ * - 高德 POI → 店铺格式转换
+ * - 评论 & 关键词生成
  */
 
 // 基准坐标：北京中关村
 const BASE_LAT = 39.9836;
 const BASE_LNG = 116.3059;
 
+// ==================== Mock 数据（兜底） ====================
 const SHOPS = [
   {
     id: 1,
@@ -254,29 +258,335 @@ const SHOPS = [
   },
 ];
 
-
 /**
- * 动态散布店铺位置
- * 将所有店铺随机散布在指定中心点的周围（确保用户在任何地方都能看到店铺）
- * @param {number} centerLat - 中心纬度
- * @param {number} centerLng - 中心经度
- * @param {number} radiusKm - 散布半径（公里），默认 3km
+ * 动态散布店铺位置（仅用于 Mock 兜底数据）
  */
 function redistributeShopsAround(centerLat, centerLng, radiusKm) {
   radiusKm = radiusKm || 3;
   SHOPS.forEach(function (shop) {
-    // 随机角度
     var angle = Math.random() * 2 * Math.PI;
-    // 随机距离：0.3km ~ radiusKm（不要太近）
     var dist = 0.3 + Math.random() * (radiusKm - 0.3);
-
-    // 经纬度偏移换算
-    // 1 度纬度 ≈ 111.32 km
-    // 1 度经度 ≈ 111.32 × cos(纬度) km
     var latOffset = (dist * Math.cos(angle)) / 111.32;
     var lngOffset = (dist * Math.sin(angle)) / (111.32 * Math.cos(centerLat * Math.PI / 180));
-
     shop.lat = centerLat + latOffset;
     shop.lng = centerLng + lngOffset;
   });
 }
+
+
+// ==================== 手动收藏店铺 ====================
+
+const DataModule = (() => {
+
+  var MANUAL_STORAGE_KEY = 'today_eat_what_manual_shops';
+
+  /** 从 localStorage 加载手动收藏 */
+  function loadManualShops() {
+    try {
+      var raw = localStorage.getItem(MANUAL_STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  /** 保存到 localStorage */
+  function saveManualShops(shops) {
+    try {
+      localStorage.setItem(MANUAL_STORAGE_KEY, JSON.stringify(shops));
+    } catch (e) {
+      console.error('保存手动店铺失败：', e);
+    }
+  }
+
+  /** 添加一家手动店铺 */
+  function addManualShop(shop) {
+    var shops = loadManualShops();
+    shop.savedAt = Date.now();
+    shops.push(shop);
+    saveManualShops(shops);
+    return shop;
+  }
+
+  /** 删除手动店铺（按 savedAt 时间戳） */
+  function deleteManualShop(savedAt) {
+    var shops = loadManualShops();
+    shops = shops.filter(function (s) { return s.savedAt !== savedAt; });
+    saveManualShops(shops);
+  }
+
+  /**
+   * 获取所有手动店铺（转换为标准 shop 格式）
+   * @param {number} userLat - 用户纬度（计算距离）
+   * @param {number} userLng - 用户经度
+   */
+  function getManualShops(userLat, userLng) {
+    var shops = loadManualShops();
+    return shops.map(function (s) {
+      var dist = 0;
+      if (userLat !== undefined && userLng !== undefined) {
+        dist = LocationModule.haversineDistance(userLat, userLng, s.lat, s.lng);
+      }
+      return {
+        id: 'manual_' + s.savedAt,
+        name: s.name,
+        category: s.category || '其他',
+        rating: s.rating || 4.0,
+        monthlySales: 0,
+        avgPrice: s.avgPrice || 20,
+        deliveryTime: s.deliveryTime || '30分钟',
+        deliveryFee: s.deliveryFee || 0,
+        lat: s.lat,
+        lng: s.lng,
+        address: s.address || '',
+        tags: s.tags || ['收藏'],
+        reviews: [],
+        posKeywords: [],
+        negKeywords: [],
+        isManual: true,
+        savedAt: s.savedAt,
+      };
+    });
+  }
+
+  // ==================== POI → 店铺格式转换 ====================
+
+  /** 高德 POI 类型 → 分类 */
+  function mapAmapTypeToCategory(amapType) {
+    if (!amapType) return '快餐简餐';
+    var t = amapType.toLowerCase();
+    if (t.indexOf('快餐') !== -1 || t.indexOf('简餐') !== -1) return '快餐简餐';
+    if (t.indexOf('川菜') !== -1) return '川菜';
+    if (t.indexOf('湘菜') !== -1) return '湘菜';
+    if (t.indexOf('粤菜') !== -1) return '粤菜';
+    if (t.indexOf('面') !== -1 || t.indexOf('粉') !== -1) return '面馆';
+    if (t.indexOf('麻辣烫') !== -1) return '麻辣烫';
+    if (t.indexOf('炸鸡') !== -1 || t.indexOf('小吃') !== -1) return '炸鸡小吃';
+    if (t.indexOf('茶') !== -1 || t.indexOf('奶茶') !== -1 || t.indexOf('饮品') !== -1 || t.indexOf('冷饮') !== -1) return '奶茶饮品';
+    if (t.indexOf('咖啡') !== -1) return '咖啡';
+    if (t.indexOf('韩') !== -1) return '韩式料理';
+    if (t.indexOf('日') !== -1) return '日料';
+    if (t.indexOf('烧烤') !== -1) return '烧烤';
+    if (t.indexOf('火锅') !== -1) return '火锅';
+    if (t.indexOf('清真') !== -1 || t.indexOf('拉面') !== -1) return '面馆';
+    if (t.indexOf('烘焙') !== -1 || t.indexOf('面包') !== -1 || t.indexOf('蛋糕') !== -1) return '烘焙甜点';
+    return '快餐简餐';
+  }
+
+  /** 从分类生成标签 */
+  function generateTags(category) {
+    var tagMap = {
+      '快餐简餐': ['出餐快', '性价比', '家常味'],
+      '川菜': ['麻辣鲜香', '正宗川味', '下饭'],
+      '湘菜': ['地道湘味', '香辣', '下饭'],
+      '粤菜': ['清淡鲜美', '精致', '食材新鲜'],
+      '面馆': ['汤鲜面劲道', '实惠', '手工'],
+      '麻辣烫': ['汤底浓郁', '选择丰富', '人气'],
+      '炸鸡小吃': ['外酥里嫩', '人气高', '出餐快'],
+      '奶茶饮品': ['网红', '颜值高', '人气'],
+      '咖啡': ['出餐快', '上班族最爱', '性价比'],
+      '韩式料理': ['韩式风味', '人气', '聚会'],
+      '日料': ['精致', '食材新鲜', '正宗'],
+      '烧烤': ['人气', '聚会', '夜宵'],
+      '火锅': ['人气爆棚', '聚会', '地道'],
+      '烘焙甜点': ['颜值高', '下午茶', '甜蜜'],
+    };
+    return (tagMap[category] || ['人气', '实惠', '推荐']).slice(0, 3);
+  }
+
+  /** 随机取数组元素 */
+  function pick(arr) {
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  /** 获取过去 N 天内的随机日期 */
+  function randomDate(maxDaysAgo) {
+    var d = new Date();
+    d.setDate(d.getDate() - Math.floor(Math.random() * maxDaysAgo));
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+
+  // 评论模板池 — 从 Mock 数据中提取的真实评论
+  var POSITIVE_POOL = [
+    { rating: 5, content: '味道很正宗！{feature}，配上主食绝了，分量也很足。' },
+    { rating: 5, content: '太好吃了！{feature}，每次点都不失望，推荐！' },
+    { rating: 5, content: '分量真的很大！味道好，价格实惠，性价比超高！' },
+    { rating: 4, content: '味道不错，{feature}。就是等的时间稍微长了点。' },
+    { rating: 5, content: '第二次点了，一如既往的好吃！{feature}，很入味。' },
+    { rating: 4, content: '{feature}很出色，整体水平在线。包装也很用心，没有洒漏。' },
+    { rating: 5, content: '配送很快，送到还是热乎的！{feature}，满足！' },
+    { rating: 4, content: '{feature}，食材新鲜。价格能接受，会回购。' },
+    { rating: 5, content: '同事推荐的，确实不错！{feature}，打工人午餐好选择。' },
+    { rating: 4, content: '总体来说挺好的，{feature}。就是配送范围要是能再大点就好了。' },
+    { rating: 5, content: '超值！{feature}，这个价位在北京很良心了。' },
+  ];
+
+  var NEGATIVE_POOL = [
+    { rating: 2, content: '今天{problem}，不如之前好吃了，有点失望。' },
+    { rating: 3, content: '中规中矩吧，没有特别惊艳。{problem}。' },
+    { rating: 2, content: '这次的{problem}，品控不太稳定。' },
+    { rating: 1, content: '送来都凉了！{problem}，很失望。' },
+    { rating: 3, content: '味道还行吧，但是{problem}，性价比一般。' },
+    { rating: 2, content: '配送超时了快20分钟，而且{problem}。' },
+    { rating: 3, content: '{problem}，但胜在方便。偶尔吃吃还行。' },
+  ];
+
+  var POS_FEATURES = ['味道', '口感', '汤底很鲜', '酱料好吃', '食材新鲜', '火候刚好', '调味恰到好处', '分量给得足', '包装精致'];
+  var NEG_PROBLEMS = ['味道偏咸', '分量比之前少了', '口感一般', '太油腻了', '有点凉了', '汤洒了一些', '偏贵', '等待时间太长'];
+
+  /** 为一间 POI 店铺生成模拟评论 */
+  function generateReviewsForShop(shopId, category) {
+    var count = 3 + Math.floor(Math.random() * 5); // 3-7 条
+    var reviews = [];
+    var users = [
+      { name: '吃货小王', avatar: '王' }, { name: '外卖达人', avatar: '李' },
+      { name: '吃遍天下', avatar: '张' }, { name: '美食猎人', avatar: '吴' },
+      { name: '打工人午餐', avatar: '杨' }, { name: '学生党', avatar: '崔' },
+      { name: '测评君', avatar: '陈' }, { name: '新尝试者', avatar: '林' },
+      { name: '回头客', avatar: '石' }, { name: '严格吃货', avatar: '万' },
+      { name: '午饭打卡', avatar: '徐' }, { name: '性价比党', avatar: '姚' },
+    ];
+    var posKeywords = [];
+    var negKeywords = [];
+
+    for (var i = 0; i < count; i++) {
+      var isPositive = Math.random() > 0.25;
+      var template, u;
+
+      if (isPositive) {
+        template = pick(POSITIVE_POOL);
+        var feat = pick(POS_FEATURES);
+        template.content = template.content.replace('{feature}', feat);
+        posKeywords.push(feat);
+        u = pick(users);
+      } else {
+        template = pick(NEGATIVE_POOL);
+        var prob = pick(NEG_PROBLEMS);
+        template.content = template.content.replace('{problem}', prob);
+        negKeywords.push(prob);
+        u = pick(users);
+      }
+
+      var imgCount = Math.random() > 0.5 ? Math.floor(Math.random() * 3) + 1 : 0;
+      var images = [];
+      for (var j = 0; j < imgCount; j++) {
+        images.push('https://picsum.photos/seed/' + String(shopId) + '_r' + i + '_' + j + '/300/300');
+      }
+
+      reviews.push({
+        id: i + 1,
+        userName: u.name,
+        avatar: u.avatar,
+        rating: template.rating,
+        content: template.content,
+        date: randomDate(30),
+        images: images,
+      });
+    }
+
+    // 去重后取前几位
+    var uniquePos = [];
+    posKeywords.forEach(function (k) { if (uniquePos.indexOf(k) === -1) uniquePos.push(k); });
+    var uniqueNeg = [];
+    negKeywords.forEach(function (k) { if (uniqueNeg.indexOf(k) === -1) uniqueNeg.push(k); });
+
+    return {
+      reviews: reviews,
+      posKeywords: uniquePos.slice(0, 6),
+      negKeywords: uniqueNeg.slice(0, 4),
+    };
+  }
+
+  /**
+   * 将高德 POI 对象转换为标准店铺格式
+   * @param {Object} poi - 高德 POI 对象
+   * @param {number} userLat - 用户纬度
+   * @param {number} userLng - 用户经度
+   * @param {number} index - 序号
+   */
+  function convertPoiToShop(poi, userLat, userLng, index) {
+    var locParts = poi.location.split(',');
+    var lat = parseFloat(locParts[1]);
+    var lng = parseFloat(locParts[0]);
+    var dist = LocationModule.haversineDistance(userLat, userLng, lat, lng);
+    var category = mapAmapTypeToCategory(poi.type);
+
+    // 高德评分（若有）或随机生成 3.2-4.9
+    var rating = 3.8;
+    if (poi.biz_ext && poi.biz_ext.rating) {
+      rating = parseFloat(poi.biz_ext.rating);
+    } else {
+      rating = 3.2 + Math.random() * 1.7;
+    }
+    rating = Math.round(rating * 10) / 10;
+    rating = Math.min(5, Math.max(3.0, rating));
+
+    // 月销量模拟（基于距离：越近销量越高）
+    var baseSales = 8000 - dist * 1200;
+    var monthlySales = Math.floor(Math.max(300, baseSales + (Math.random() - 0.5) * 3000));
+
+    // 人均价格（基于分类）
+    var priceMap = {
+      '快餐简餐': [15, 30], '川菜': [30, 60], '湘菜': [28, 50],
+      '粤菜': [35, 70], '面馆': [15, 28], '麻辣烫': [18, 35],
+      '炸鸡小吃': [20, 40], '奶茶饮品': [15, 30], '咖啡': [15, 35],
+      '韩式料理': [30, 55], '日料': [40, 80], '烧烤': [35, 65],
+      '火锅': [50, 100], '烘焙甜点': [20, 45],
+    };
+    var priceRange = priceMap[category] || [20, 40];
+    var avgPrice = Math.floor(priceRange[0] + Math.random() * (priceRange[1] - priceRange[0]));
+
+    // 配送时间（基于距离）
+    var minTime = Math.floor(15 + dist * 4);
+    var maxTime = Math.floor(minTime + 10 + Math.random() * 10);
+    var deliveryTime = minTime + '-' + maxTime + '分钟';
+
+    // 配送费
+    var deliveryFee = Math.random() > 0.55 ? 0 : Math.floor(Math.random() * 5) + 1;
+
+    // 生成评论和关键词
+    var reviewData = generateReviewsForShop(poi.id || index, category);
+
+    return {
+      id: 'poi_' + (poi.id || index),
+      name: poi.name,
+      category: category,
+      rating: rating,
+      monthlySales: monthlySales,
+      avgPrice: avgPrice,
+      deliveryTime: deliveryTime,
+      deliveryFee: deliveryFee,
+      lat: lat,
+      lng: lng,
+      address: poi.address || '',
+      tags: generateTags(category),
+      reviews: reviewData.reviews,
+      posKeywords: reviewData.posKeywords,
+      negKeywords: reviewData.negKeywords,
+      isManual: false,
+    };
+  }
+
+  /** 一键获取所有分类选项 */
+  var CATEGORY_OPTIONS = [
+    '快餐简餐', '川菜', '湘菜', '粤菜', '面馆', '麻辣烫',
+    '炸鸡小吃', '奶茶饮品', '咖啡', '韩式料理', '日料',
+    '烧烤', '火锅', '烘焙甜点', '其他',
+  ];
+
+  return {
+    loadManualShops,
+    saveManualShops,
+    addManualShop,
+    deleteManualShop,
+    getManualShops,
+    mapAmapTypeToCategory,
+    generateTags,
+    generateReviewsForShop,
+    convertPoiToShop,
+    CATEGORY_OPTIONS,
+  };
+
+})();
