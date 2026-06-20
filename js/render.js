@@ -80,24 +80,20 @@ const RenderModule = (() => {
     appEl.innerHTML =
       '<div class="page relative min-h-screen overflow-hidden bg-gradient-to-b from-[#FFF0E8] via-[#FFF5F0] to-[#FFE8DC] flex flex-col items-center justify-center">' +
 
-        // ── 背景光斑层 ──
+        // ── 背景光斑层（radial-gradient 替代 blur，零 GPU 开销）──
         '<div class="absolute inset-0 pointer-events-none overflow-hidden">' +
-          '<div class="absolute w-[180px] h-[180px] rounded-full bg-[rgba(255,140,90,0.18)] blur-[80px] -top-20 -left-16" style="animation:orbPulse 5s ease-in-out infinite"></div>' +
-          '<div class="absolute w-[200px] h-[200px] rounded-full bg-[rgba(255,130,130,0.15)] blur-[100px] top-[30%] -right-16" style="animation:orbPulse2 7s ease-in-out infinite 1s"></div>' +
-          '<div class="absolute w-[140px] h-[140px] rounded-full bg-[rgba(255,180,100,0.15)] blur-[70px] bottom-[25%] left-[25%]" style="animation:orbPulse3 6s ease-in-out infinite 2s"></div>' +
-          '<div class="absolute w-[120px] h-[120px] rounded-full bg-[rgba(255,150,160,0.12)] blur-[60px] top-[55%] left-[60%]" style="animation:orbPulse 5.5s ease-in-out infinite 1.5s"></div>' +
+          '<div class="absolute w-[180px] h-[180px] rounded-full -top-20 -left-16" style="background:radial-gradient(circle, rgba(255,140,90,0.22) 0%, transparent 70%);animation:orbPulse 5s ease-in-out infinite"></div>' +
+          '<div class="absolute w-[200px] h-[200px] rounded-full top-[30%] -right-16" style="background:radial-gradient(circle, rgba(255,130,130,0.18) 0%, transparent 70%);animation:orbPulse 7s ease-in-out infinite 1.5s"></div>' +
+          '<div class="absolute w-[160px] h-[160px] rounded-full bottom-[20%] left-[20%]" style="background:radial-gradient(circle, rgba(255,180,100,0.18) 0%, transparent 70%);animation:orbPulse 6s ease-in-out infinite 3s"></div>' +
         '</div>' +
 
-        // ── 漂浮食物 emoji ──
+        // ── 漂浮食物 emoji（5个，仅 transform 动画）──
         '<div class="absolute inset-0 pointer-events-none overflow-hidden">' +
-          '<span class="absolute text-3xl opacity-40" style="top:10%;left:8%;animation:emojiFloat1 6s ease-in-out infinite">🍜</span>' +
-          '<span class="absolute text-4xl opacity-30" style="top:16%;right:10%;animation:emojiFloat2 7s ease-in-out infinite 0.5s">🍕</span>' +
-          '<span class="absolute text-2xl opacity-40" style="top:32%;left:12%;animation:emojiFloat3 6.5s ease-in-out infinite 1s">🍔</span>' +
-          '<span class="absolute text-3xl opacity-30" style="top:22%;right:18%;animation:emojiFloat4 7.5s ease-in-out infinite 0.3s">🍟</span>' +
-          '<span class="absolute text-4xl opacity-35" style="top:8%;left:68%;animation:emojiFloat2 6.8s ease-in-out infinite 1.8s">🍣</span>' +
-          '<span class="absolute text-2xl opacity-30" style="top:40%;left:78%;animation:emojiFloat1 7.2s ease-in-out infinite 1.2s">🍰</span>' +
-          '<span class="absolute text-3xl opacity-35" style="top:28%;left:5%;animation:emojiFloat3 6.3s ease-in-out infinite 2s">🍱</span>' +
-          '<span class="absolute text-2xl opacity-40" style="top:14%;left:45%;animation:emojiFloat4 7.8s ease-in-out infinite 0.8s">🌮</span>' +
+          '<span class="welcome-emoji absolute text-3xl opacity-35" style="top:10%;left:8%;animation:emojiFloat1 6s ease-in-out infinite">🍜</span>' +
+          '<span class="welcome-emoji absolute text-4xl opacity-30" style="top:16%;right:10%;animation:emojiFloat2 7s ease-in-out infinite 0.8s">🍕</span>' +
+          '<span class="welcome-emoji absolute text-2xl opacity-35" style="top:34%;left:12%;animation:emojiFloat3 6.5s ease-in-out infinite 1.6s">🍔</span>' +
+          '<span class="welcome-emoji absolute text-4xl opacity-30" style="top:8%;left:68%;animation:emojiFloat2 7.2s ease-in-out infinite 2.2s">🍣</span>' +
+          '<span class="welcome-emoji absolute text-3xl opacity-35" style="top:28%;right:14%;animation:emojiFloat1 6.8s ease-in-out infinite 3s">🍟</span>' +
         '</div>' +
 
         // ── 内容区 ──
