@@ -87,7 +87,6 @@ const RenderModule = (() => {
     const tabs = [
       { key: 'composite', label: '🏆 综合排序' },
       { key: 'rating', label: '⭐ 评分优先' },
-      { key: 'sales', label: '🔥 销量优先' },
       { key: 'distance', label: '📏 距离最近' },
     ];
 
@@ -109,26 +108,55 @@ const RenderModule = (() => {
 
   /** 渲染店铺统计摘要 */
   function renderSummary(shops) {
-    const total = shops.length;
-    const avgRating = (shops.reduce((s, shop) => s + shop.rating, 0) / total).toFixed(1);
+    var total = shops.length;
+    var ratedShops = shops.filter(function (s) { return s.rating !== null && s.rating > 0; });
+    var avgRating = ratedShops.length > 0
+      ? (ratedShops.reduce(function (sum, s) { return sum + s.rating; }, 0) / ratedShops.length).toFixed(1)
+      : '暂无';
     return `
       <div class="shop-summary">
-        附近 <strong>${total}</strong> 家店铺 · 均分 <strong>⭐${avgRating}</strong>
+        附近 <strong>${total}</strong> 家店铺 · 有评分 <strong>${ratedShops.length}</strong> 家 · 均分 <strong>⭐${avgRating}</strong>
       </div>
     `;
   }
 
-  /** 渲染单张店铺卡片 */
-  function renderShopCard(shop) {
-    const distStr = LocationModule.formatDistance(shop.distance);
-    const salesStr = shop.monthlySales > 1000
-      ? (shop.monthlySales / 1000).toFixed(0) + 'k'
-      : shop.monthlySales;
+  /** 格式化值：有值显示，无值显示"无" */
+  function fmtVal(val, prefix, suffix) {
+    prefix = prefix || '';
+    suffix = suffix || '';
+    if (val === null || val === undefined || val === '') return prefix + '无' + suffix;
+    return prefix + val + suffix;
+  }
 
-    // 手动收藏的店铺显示徽章
+  /** 渲染单张店铺卡片（仅真实数据） */
+  function renderShopCard(shop) {
+    var distStr = LocationModule.formatDistance(shop.distance);
+
+    // 评分：有真实评分显示星级，没有显示"暂无评分"
+    var ratingHtml;
+    if (shop.rating !== null && shop.rating > 0) {
+      ratingHtml = renderStars(shop.rating, 'small') + '<span class="shop-rating-num">' + shop.rating + '</span>';
+    } else {
+      ratingHtml = '<span class="shop-rating-num no-data">暂无评分</span>';
+    }
+
+    // 人均：有数据展示，无数据显示"无"
+    var priceHtml = shop.avgPrice !== null && shop.avgPrice > 0
+      ? '💰 ¥' + shop.avgPrice + '/人'
+      : '💰 人均暂无';
+
+    // 手动收藏徽章
     var manualBadge = shop.isManual
       ? '<span class="shop-manual-badge" title="手动收藏的店铺">⭐收藏</span>'
       : '';
+
+    // 标签（仅手动店铺有⭐收藏标签）
+    var tagsHtml = '';
+    if (shop.tags && shop.tags.length > 0) {
+      tagsHtml = '<div class="shop-tags">' +
+        shop.tags.map(function (t) { return '<span class="shop-tag">' + t + '</span>'; }).join('') +
+        '</div>';
+    }
 
     return `
       <div class="shop-card ${shop.isManual ? 'shop-card-manual' : ''}" data-shop-id="${shop.id}">
@@ -137,21 +165,16 @@ const RenderModule = (() => {
           <div class="shop-info">
             <h3 class="shop-name">${shop.name} ${manualBadge}</h3>
             <div class="shop-meta">
-              ${renderStars(shop.rating, 'small')}
-              <span class="shop-rating-num">${shop.rating}</span>
-              <span class="shop-sales">月售 ${salesStr}</span>
+              ${ratingHtml}
             </div>
           </div>
           <div class="shop-arrow">›</div>
         </div>
         <div class="shop-card-footer">
-          <div class="shop-tags">
-            ${shop.tags.map((t) => `<span class="shop-tag">${t}</span>`).join('')}
-          </div>
+          ${tagsHtml}
           <div class="shop-extra">
             <span class="shop-distance">📍 ${distStr}</span>
-            <span class="shop-price">💰 ¥${shop.avgPrice}/人</span>
-            <span class="shop-time">🕐 ${shop.deliveryTime}</span>
+            <span class="shop-price">${priceHtml}</span>
           </div>
         </div>
       </div>
@@ -355,57 +378,97 @@ const RenderModule = (() => {
     `;
   }
 
-  /** 渲染完整详情页 */
+  /** 渲染完整详情页（仅真实数据） */
   function renderShopDetail(shop) {
-    const distStr = LocationModule.formatDistance(shop.distance);
-    const salesStr = shop.monthlySales > 1000
-      ? (shop.monthlySales / 1000).toFixed(1) + 'k'
-      : shop.monthlySales;
-    const reviewImages = collectReviewImages(shop.reviews);
+    var distStr = LocationModule.formatDistance(shop.distance);
+
+    // 评分
+    var ratingHtml;
+    if (shop.rating !== null && shop.rating > 0) {
+      ratingHtml = renderStars(shop.rating, 'large') + '<span class="detail-rating-num">' + shop.rating + '</span>';
+    } else {
+      ratingHtml = '<span class="detail-rating-num no-data">暂无评分</span>';
+    }
+
+    // 基本信息行（只显示有数据的字段）
+    var infoItems = [];
+    infoItems.push('<div class="info-item">📍 ' + distStr + '</div>');
+    if (shop.avgPrice !== null && shop.avgPrice > 0) {
+      infoItems.push('<div class="info-item">💰 ¥' + shop.avgPrice + '/人</div>');
+    } else {
+      infoItems.push('<div class="info-item">💰 人均暂无</div>');
+    }
+    if (shop.address) {
+      infoItems.push('<div class="info-item">🏠 ' + shop.address + '</div>');
+    }
+
+    // 分类标签
+    var tagsHtml = '';
+    if (shop.tags && shop.tags.length > 0) {
+      tagsHtml = '<div class="detail-shop-tags">' +
+        shop.tags.map(function (t) { return '<span class="shop-tag">' + t + '</span>'; }).join('') +
+        '</div>';
+    }
+
+    // 真实店铺照片
+    var photosHtml = '';
+    if (shop.realPhotos && shop.realPhotos.length > 0) {
+      photosHtml = `
+        <div class="detail-section">
+          <h3 class="detail-section-title">📷 店铺实拍（${shop.realPhotos.length}张）</h3>
+          <div class="detail-photo-grid">
+            ${shop.realPhotos.map(function (url, i) {
+              return '<div class="detail-photo-item" data-photo-index="' + i + '"><img src="' + url + '" alt="店铺实拍" loading="lazy"></div>';
+            }).join('')}
+          </div>
+        </div>
+      `;
+    } else {
+      photosHtml = '<div class="detail-section"><p class="no-data-hint">暂无店铺实拍照片</p></div>';
+    }
 
     appEl.innerHTML = `
       <div class="page page-detail">
-        <!-- 顶部导航 -->
         <div class="detail-nav">
           <button class="btn-back" id="btnBack">← 返回</button>
           <span class="detail-nav-title">店铺详情</span>
           <span class="detail-nav-spacer"></span>
         </div>
 
-        <!-- 店铺信息区 -->
         <div class="detail-header">
           <h2 class="detail-shop-name">${shop.name}</h2>
           <div class="detail-shop-meta">
-            ${renderStars(shop.rating, 'large')}
-            <span class="detail-rating-num">${shop.rating}</span>
-            <span class="detail-sales">月售 ${salesStr}</span>
+            ${ratingHtml}
           </div>
-          <div class="detail-shop-tags">
-            ${shop.tags.map((t) => `<span class="shop-tag">${t}</span>`).join('')}
-          </div>
+          ${tagsHtml}
           <div class="detail-shop-info">
-            <div class="info-item">📍 ${distStr}</div>
-            <div class="info-item">💰 ¥${shop.avgPrice}/人</div>
-            <div class="info-item">🕐 ${shop.deliveryTime}</div>
-            <div class="info-item">🚚 配送费 ¥${shop.deliveryFee}</div>
+            ${infoItems.join('')}
           </div>
         </div>
 
         <div class="detail-body">
-          <!-- 好评关键词 -->
-          ${renderPosKeywords(shop.posKeywords)}
+          ${photosHtml}
 
-          <!-- 差评关键词 -->
-          ${renderNegKeywords(shop.negKeywords)}
-
-          <!-- 评论区实图 -->
-          ${renderReviewImages(reviewImages)}
-
-          <!-- 评论区 -->
-          ${renderReviews(shop.reviews)}
+          <div class="detail-section">
+            <p class="data-source-note">💡 以上数据来源于高德地图。评论数据暂不可用。</p>
+          </div>
         </div>
       </div>
     `;
+
+    // 绑定实拍照片点击查看大图
+    setTimeout(function () {
+      var photoItems = document.querySelectorAll('.detail-photo-item');
+      if (photoItems.length > 0) {
+        var photoUrls = shop.realPhotos.map(function (url) { return { url: url, userName: '', content: '' }; });
+        photoItems.forEach(function (item) {
+          item.addEventListener('click', function () {
+            var idx = parseInt(item.dataset.photoIndex);
+            renderImageViewer(photoUrls, idx);
+          });
+        });
+      }
+    }, 0);
   }
 
   // ==================== 随机推荐弹窗 ====================
@@ -565,7 +628,6 @@ const RenderModule = (() => {
     renderImageViewer,
     renderRandomPicker,
     closeRandomPicker,
-    collectReviewImages,
     renderAddShopForm,
     closeAddShopForm,
     renderDataSourceInfo,

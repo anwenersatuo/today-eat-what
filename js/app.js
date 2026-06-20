@@ -105,10 +105,30 @@ const App = (() => {
       });
       poiCount = allShops.length;
     } else {
-      // 高德无结果，使用 Mock 数据兜底
+      // 高德无结果，使用 Mock 数据兜底（仅店名/地址/坐标，其余为无）
       console.warn('高德POI无结果，使用兜底Mock数据');
-      allShops = SHOPS.slice();
       redistributeShopsAround(lat, lng);
+      allShops = SHOPS.map(function (s, i) {
+        return {
+          id: 'mock_' + i,
+          name: s.name,
+          category: s.category || '其他',
+          rating: null,
+          monthlySales: null,
+          avgPrice: null,
+          deliveryTime: null,
+          deliveryFee: null,
+          lat: s.lat,
+          lng: s.lng,
+          address: s.address || '',
+          tags: [],
+          reviews: [],
+          posKeywords: [],
+          negKeywords: [],
+          realPhotos: [],
+          isManual: false,
+        };
+      });
       allShops = LocationModule.filterShopsByDistance(allShops);
       poiCount = 0;
     }
@@ -271,23 +291,29 @@ const App = (() => {
 
     if (nameEl) nameEl.textContent = shop.name;
     if (metaEl) {
+      var ratingStr = (shop.rating !== null && shop.rating > 0) ? shop.rating : '暂无';
       metaEl.innerHTML =
         '<span class="stars">' + renderStarsForResult(shop.rating) + '</span>' +
-        '<span>' + shop.rating + '</span>' +
+        '<span>' + ratingStr + '</span>' +
         '<span>📍 ' + distStr + '</span>';
     }
-    if (tagsEl) {
+    if (tagsEl && shop.tags && shop.tags.length > 0) {
       tagsEl.innerHTML = shop.tags.map(function (t) {
         return '<span class="shop-tag">' + t + '</span>';
       }).join('');
+    } else if (tagsEl) {
+      tagsEl.innerHTML = '';
     }
 
     if (resultEl) resultEl.style.display = 'block';
     if (actionsEl) actionsEl.style.display = 'flex';
   }
 
-  /** 简单的星星渲染（供 showRandomResult 内部使用） */
+  /** 简单的星星渲染（供 showRandomResult 内部使用，处理 null） */
   function renderStarsForResult(rating) {
+    if (rating === null || rating === undefined || rating <= 0) {
+      return '<span style="color:#999;font-size:0.8em;">暂无评分</span>';
+    }
     var full = Math.floor(rating);
     var empty = 5 - full;
     var html = '';
@@ -448,8 +474,8 @@ const App = (() => {
       address: document.getElementById('addShopAddress')?.value.trim() || '',
       lat: userLocation ? userLocation.lat : BASE_LAT,
       lng: userLocation ? userLocation.lng : BASE_LNG,
-      deliveryTime: '30分钟',
-      deliveryFee: 0,
+      deliveryTime: null,
+      deliveryFee: null,
     };
 
     DataModule.addManualShop(shop);
@@ -505,23 +531,6 @@ const App = (() => {
       }
 
       window.scrollTo({ top: 0, behavior: 'instant' });
-    });
-
-    const reviewImages = RenderModule.collectReviewImages(shop.reviews);
-    document.querySelectorAll('.image-card:not(.more-images)').forEach((card) => {
-      card.addEventListener('click', () => {
-        const idx = parseInt(card.dataset.index);
-        RenderModule.renderImageViewer(reviewImages, idx);
-      });
-    });
-
-    document.querySelectorAll('.review-thumb').forEach((thumb) => {
-      thumb.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const src = thumb.src;
-        const idx = reviewImages.findIndex((img) => img.url === src);
-        if (idx >= 0) RenderModule.renderImageViewer(reviewImages, idx);
-      });
     });
   }
 
