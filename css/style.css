@@ -920,7 +920,7 @@ body {
   top: 55px;
   left: 12px;
   right: 12px;
-  z-index: 20;
+  z-index: 500;            /* 必须高于 Leaflet 地图层级 */
   background: #fff;
   border-radius: 12px;
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
