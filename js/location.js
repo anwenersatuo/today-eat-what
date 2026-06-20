@@ -419,28 +419,38 @@ const LocationModule = (() => {
   async function enrichPois(pois) {
     if (!pois || pois.length === 0) return pois;
 
-    // 筛选出没有真实评分的 POI
+    // 筛选需要补全的 POI：
+    // 1. 没有评分 → 需要补评分
+    // 2. 没有照片 → 需要补照片
+    // 3. 照片少于 10 张 → 也尝试调详情API拿更多（详情API通常返回更多照片）
+    var MIN_PHOTOS = 10;
     var needEnrich = [];
     for (var i = 0; i < pois.length; i++) {
       var poi = pois[i];
       var hasRating = poi.biz_ext && poi.biz_ext.rating;
-      var hasPhotos = poi.photos && poi.photos.length > 0;
-      // 有评分且有照片 → 跳过；否则需要补全
-      if (!hasRating || !hasPhotos) {
-        needEnrich.push({ index: i, poi: poi, needRating: !hasRating, needPhotos: !hasPhotos });
+      var photoCount = (poi.photos && poi.photos.length) ? poi.photos.length : 0;
+      var hasEnoughPhotos = photoCount >= MIN_PHOTOS;
+      // 缺评分或缺照片或照片不够多 → 需要补全
+      if (!hasRating || photoCount === 0 || !hasEnoughPhotos) {
+        needEnrich.push({
+          index: i, poi: poi,
+          needRating: !hasRating,
+          needPhotos: (photoCount === 0 || !hasEnoughPhotos)
+        });
       }
     }
 
     if (needEnrich.length === 0) {
-      console.log('所有POI均已有真实评分和照片，无需补全');
+      console.log('所有POI均已有真实评分和充足照片（≥' + MIN_PHOTOS + '张），无需补全');
       return pois;
     }
 
-    // 最多补全 40 个（8组 × 5并发），控制 API 消耗
-    var toEnrich = needEnrich.slice(0, 40);
+    // 优先补全：完全没有照片/评分的排前面，照片少的其次
+    // 【最多补全 80 个（16组 × 5并发），让更多店铺拿到更多照片】
+    var toEnrich = needEnrich.slice(0, 80);
     var CONCURRENCY = 5;
 
-    console.log('POI评分补全：' + toEnrich.length + ' 家需要补全（共' + needEnrich.length + '家缺失）');
+    console.log('POI补全：' + toEnrich.length + ' 家需要补全（共' + needEnrich.length + '家缺失/不全）');
 
     // 分组并发
     for (var batch = 0; batch < toEnrich.length; batch += CONCURRENCY) {
@@ -453,13 +463,17 @@ const LocationModule = (() => {
               item.poi.biz_ext = item.poi.biz_ext || {};
               item.poi.biz_ext.rating = detail.biz_ext.rating;
             }
-            // 补充真实照片
+            // 补充真实照片（详情API返回的覆盖原数据——通常更全更多）
             if (item.needPhotos && detail.photos && detail.photos.length > 0) {
+              var oldCount = item.poi.photos ? item.poi.photos.length : 0;
               item.poi.photos = detail.photos;
+              console.log('📷 ' + item.poi.name + ' 照片 ' + oldCount + '→' + detail.photos.length + '张');
+            } else if (!item.needRating || !(detail.biz_ext && detail.biz_ext.rating)) {
+              // 不需要补评分的情况下不再打log
             }
-            console.log('✅ ' + item.poi.name + ' 评分补全：' +
-              (item.poi.biz_ext && item.poi.biz_ext.rating ? item.poi.biz_ext.rating : '无') +
-              ' | 照片：' + (item.poi.photos ? item.poi.photos.length + '张' : '无'));
+            if (item.needRating && detail.biz_ext && detail.biz_ext.rating) {
+              console.log('⭐ ' + item.poi.name + ' 评分补全：' + detail.biz_ext.rating);
+            }
           }
         });
       });
