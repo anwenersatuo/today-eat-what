@@ -266,6 +266,7 @@ const RenderModule = (() => {
           ${shops.length === 0 ? '<div class="empty-state">😢 5公里范围内暂无店铺<br><small>试试移动地图位置，或者手动添加一家</small></div>' : ''}
         </div>
         ${addBtn}
+        <p class="data-source-note">数据来源于高德地图</p>
       </div>
     `;
   }
@@ -450,7 +451,7 @@ const RenderModule = (() => {
           ${photosHtml}
 
           <div class="detail-section">
-            <p class="data-source-note">💡 以上数据来源于高德地图。评论数据暂不可用。</p>
+            <p class="data-source-note">数据来源于高德地图</p>
           </div>
         </div>
       </div>
