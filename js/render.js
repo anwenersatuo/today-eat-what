@@ -78,24 +78,77 @@ const RenderModule = (() => {
 
   function renderWelcomeScreen() {
     appEl.innerHTML =
-      '<div class="page min-h-screen flex items-center justify-center">' +
-        '<div class="text-center px-8 py-12">' +
-          '<div class="text-7xl mb-4" style="animation: welcomeBounce 1.5s ease infinite">🍜</div>' +
-          '<h1 class="text-[32px] font-extrabold text-[#1C1C1E] mb-2 tracking-wide">今天吃什么</h1>' +
-          '<p class="text-[15px] text-[#6E6E73] leading-relaxed mb-9">选择送餐地址，<br>从此告别选择困难症</p>' +
-          '<div class="flex flex-col gap-3 items-center">' +
-            '<button id="btnStartLocate" class="btn-locate inline-flex items-center gap-2.5 px-9 py-4 bg-gradient-to-br from-primary to-[#FF8C5A] text-white border-none rounded-full text-lg font-bold cursor-pointer shadow-glow tracking-wider">' +
-              '<span class="text-[22px]">📍</span>' +
-              '<span>使用我的位置</span>' +
-            '</button>' +
-            '<button id="btnOpenMap" class="btn-locate inline-flex items-center gap-2.5 px-9 py-4 glass rounded-full text-primary border-2 border-primary/20 text-lg font-bold cursor-pointer shadow-soft">' +
-              '<span class="text-[22px]">🗺️</span>' +
-              '<span>在地图上选位置</span>' +
-            '</button>' +
+      '<div class="page relative min-h-screen overflow-hidden bg-gradient-to-b from-[#FFF0E8] via-[#FFF5F0] to-[#FFE8DC] flex flex-col items-center justify-center">' +
+
+        // ── 背景光斑层 ──
+        '<div class="absolute inset-0 pointer-events-none overflow-hidden">' +
+          '<div class="absolute w-[180px] h-[180px] rounded-full bg-[rgba(255,140,90,0.18)] blur-[80px] -top-20 -left-16" style="animation:orbPulse 5s ease-in-out infinite"></div>' +
+          '<div class="absolute w-[200px] h-[200px] rounded-full bg-[rgba(255,130,130,0.15)] blur-[100px] top-[30%] -right-16" style="animation:orbPulse2 7s ease-in-out infinite 1s"></div>' +
+          '<div class="absolute w-[140px] h-[140px] rounded-full bg-[rgba(255,180,100,0.15)] blur-[70px] bottom-[25%] left-[25%]" style="animation:orbPulse3 6s ease-in-out infinite 2s"></div>' +
+          '<div class="absolute w-[120px] h-[120px] rounded-full bg-[rgba(255,150,160,0.12)] blur-[60px] top-[55%] left-[60%]" style="animation:orbPulse 5.5s ease-in-out infinite 1.5s"></div>' +
+        '</div>' +
+
+        // ── 漂浮食物 emoji ──
+        '<div class="absolute inset-0 pointer-events-none overflow-hidden">' +
+          '<span class="absolute text-3xl opacity-40" style="top:10%;left:8%;animation:emojiFloat1 6s ease-in-out infinite">🍜</span>' +
+          '<span class="absolute text-4xl opacity-30" style="top:16%;right:10%;animation:emojiFloat2 7s ease-in-out infinite 0.5s">🍕</span>' +
+          '<span class="absolute text-2xl opacity-40" style="top:32%;left:12%;animation:emojiFloat3 6.5s ease-in-out infinite 1s">🍔</span>' +
+          '<span class="absolute text-3xl opacity-30" style="top:22%;right:18%;animation:emojiFloat4 7.5s ease-in-out infinite 0.3s">🍟</span>' +
+          '<span class="absolute text-4xl opacity-35" style="top:8%;left:68%;animation:emojiFloat2 6.8s ease-in-out infinite 1.8s">🍣</span>' +
+          '<span class="absolute text-2xl opacity-30" style="top:40%;left:78%;animation:emojiFloat1 7.2s ease-in-out infinite 1.2s">🍰</span>' +
+          '<span class="absolute text-3xl opacity-35" style="top:28%;left:5%;animation:emojiFloat3 6.3s ease-in-out infinite 2s">🍱</span>' +
+          '<span class="absolute text-2xl opacity-40" style="top:14%;left:45%;animation:emojiFloat4 7.8s ease-in-out infinite 0.8s">🌮</span>' +
+        '</div>' +
+
+        // ── 内容区 ──
+        '<div class="relative z-10 flex flex-col items-center px-8 text-center max-w-[360px]">' +
+
+          // 主标题 — 渐变文字
+          '<h1 class="welcome-title-gradient text-[42px] font-extrabold tracking-wide mb-2 leading-tight" id="welcomeTitle" style="opacity:0;transform:translateY(-8px)">' +
+            '🍜 今天吃什么' +
+          '</h1>' +
+
+          // 情绪引导文案 — 逐行错落入场
+          '<div class="text-base leading-relaxed mb-10" id="welcomeCopy">' +
+            '<p class="welcome-copy-line text-[#8C7A6E]" style="animation-delay:0.2s">出去不知道吃什么</p>' +
+            '<p class="welcome-copy-line text-[#8C7A6E]" style="animation-delay:0.35s">没关系！！！</p>' +
+            '<p class="welcome-copy-line text-[#8C7A6E]" style="animation-delay:0.5s">今天去探索一家好吃的店</p>' +
           '</div>' +
-          '<p class="mt-5 text-xs text-[#AEAEB2]">搜索范围：5公里</p>' +
+
+          // 🎲 核心 CTA — 呼吸发光动画
+          '<button id="btnStartLocate" ' +
+            'class="welcome-cta btn-locate flex items-center justify-center gap-2.5 w-full px-10 py-4 ' +
+            'bg-gradient-to-r from-[#FF6B35] via-[#FF7B50] to-[#FF4D8C] text-white ' +
+            'rounded-full text-lg font-bold shadow-glow tracking-wider" ' +
+            'style="animation:btnBreathe 2.5s ease-in-out infinite">' +
+            '<span class="text-2xl btn-locate-icon">🎲</span>' +
+            '<span>开始随机探索</span>' +
+          '</button>' +
+
+          // ✨ 副提示 — 弱化延迟淡入
+          '<p class="mt-4 text-sm text-[#B0A098]" id="welcomeHint" style="opacity:0;animation:hintFadeIn 0.8s ease-out 0.7s forwards">' +
+            '✨ 今天可能遇到你的新最爱' +
+          '</p>' +
+
+          // 地图选点 — 弱化为文字链接
+          '<button id="btnOpenMap" ' +
+            'class="btn-locate mt-6 text-xs text-[#B0A098] bg-transparent border-none cursor-pointer underline underline-offset-4 decoration-[#D0C8C0] hover:text-[#8C7A6E] transition-colors">' +
+            '在地图上选位置' +
+          '</button>' +
+
         '</div>' +
       '</div>';
+
+    // ── Motion One 标题入场 ──
+    if (window.Motion) {
+      try {
+        var m = window.Motion;
+        setTimeout(function() {
+          var title = document.getElementById('welcomeTitle');
+          if (title) m.animate(title, { opacity: [0, 1], transform: ['translateY(-8px)', 'translateY(0)'] }, { duration: 0.6, easing: 'ease-out' });
+        }, 80);
+      } catch (_) {}
+    }
   }
 
   // ==================== 列表页组件 ====================
