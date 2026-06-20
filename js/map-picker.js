@@ -39,6 +39,7 @@ const MapPicker = (() => {
           <div class="map-search-box">
             <input type="text" id="mapSearchInput" placeholder="搜索地址…" class="map-search-input" />
             <button class="map-search-clear" id="mapSearchClear" style="display:none">✕</button>
+            <button class="map-search-btn" id="mapSearchBtn">🔍</button>
           </div>
         </div>
 
@@ -129,20 +130,34 @@ const MapPicker = (() => {
   }
 
   /**
-   * 🔧 立即显示坐标（不等待地理编码），再异步更新为文字地址
-   * 解决移动网络下 Nominatim API 慢/超时导致"正在获取地址…"永久卡住的问题
+   * 获取红蓝图钉当前位置的具体地址
+   * 不显示经纬度，只显示文字地址或友好提示
    */
   function updateCenterAddressImmediate() {
     var center = getCenter();
     var addressText = document.getElementById('mapAddressText');
-    // 先立即显示坐标（永不卡住）
-    if (addressText) {
-      addressText.textContent = center.lat.toFixed(4) + ', ' + center.lng.toFixed(4);
-    }
-    // 再异步获取文字地址（成功则替换）
+    if (!addressText) return;
+
+    // 先显示加载状态
+    addressText.textContent = '正在获取地址…';
+
     LocationModule.reverseGeocode(center.lat, center.lng).then(function (addr) {
-      if (addressText) {
+      if (!addressText) return;
+      // 如果返回的仍是坐标格式，说明获取失败
+      if (addr && /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(addr.trim())) {
+        addressText.textContent = '📍 选中位置（地址获取失败，请移动地图重试）';
+        addressText.style.color = '#e74c3c';
+      } else if (addr) {
         addressText.textContent = addr;
+        addressText.style.color = ''; // 恢复正常颜色
+      } else {
+        addressText.textContent = '📍 选中位置（地址获取失败）';
+        addressText.style.color = '#e74c3c';
+      }
+    }).catch(function () {
+      if (addressText) {
+        addressText.textContent = '📍 选中位置（网络异常，请移动地图重试）';
+        addressText.style.color = '#e74c3c';
       }
     });
   }
@@ -174,13 +189,65 @@ const MapPicker = (() => {
     });
 
     // 搜索框
-    const searchInput = document.getElementById('mapSearchInput');
-    const searchClear = document.getElementById('mapSearchClear');
-    const searchResults = document.getElementById('mapSearchResults');
+    var searchInput = document.getElementById('mapSearchInput');
+    var searchClear = document.getElementById('mapSearchClear');
+    var searchResults = document.getElementById('mapSearchResults');
+    var searchBtn = document.getElementById('mapSearchBtn');
 
-    searchInput?.addEventListener('input', async (e) => {
-      const query = e.target.value.trim();
+    /**
+     * 执行地址搜索（无防抖，立即触发）
+     */
+    async function performSearch() {
+      var query = searchInput.value.trim();
+      if (query.length < 2) {
+        searchResults.style.display = 'none';
+        return;
+      }
+
+      // 显示加载状态
+      searchResults.innerHTML = '<div class="map-search-empty">🔍 搜索中…</div>';
+      searchResults.style.display = 'block';
+
+      var results = await LocationModule.geocode(query);
+      if (results.length > 0) {
+        searchResults.innerHTML = results
+          .map(function (r, i) {
+            return '<div class="map-search-item" data-lat="' + r.lat + '" data-lng="' + r.lng + '" data-idx="' + i + '">' +
+              '<span class="search-item-icon">📍</span>' +
+              '<span class="search-item-name">' + r.name + '</span>' +
+            '</div>';
+          })
+          .join('');
+        searchResults.style.display = 'block';
+      } else {
+        searchResults.innerHTML = '<div class="map-search-empty">未找到相关地址</div>';
+        searchResults.style.display = 'block';
+      }
+    }
+
+    /** 跳转到第一个搜索结果 */
+    function jumpToFirstResult() {
+      var firstResult = searchResults.querySelector('.map-search-item');
+      if (firstResult) {
+        var lat = parseFloat(firstResult.dataset.lat);
+        var lng = parseFloat(firstResult.dataset.lng);
+        map.setView([lat, lng], 17, { animate: true });
+        searchResults.style.display = 'none';
+        searchInput.value = '';
+        searchClear.style.display = 'none';
+      }
+    }
+
+    // 🔍 搜索按钮点击
+    searchBtn?.addEventListener('click', function () {
+      performSearch();
+    });
+
+    // 输入时自动搜索（防抖）+ 清除按钮显隐
+    searchInput?.addEventListener('input', function (e) {
+      var query = e.target.value.trim();
       searchClear.style.display = query ? 'block' : 'none';
+      searchBtn.style.display = query ? 'none' : '';  // 有内容时隐藏🔍显示✕
 
       if (query.length < 2) {
         searchResults.style.display = 'none';
@@ -189,39 +256,20 @@ const MapPicker = (() => {
 
       // 防抖搜索
       if (searchInput._debounceTimer) clearTimeout(searchInput._debounceTimer);
-      searchInput._debounceTimer = setTimeout(async () => {
-        const results = await LocationModule.geocode(query);
-        if (results.length > 0) {
-          searchResults.innerHTML = results
-            .map(
-              (r, i) => `
-            <div class="map-search-item" data-lat="${r.lat}" data-lng="${r.lng}" data-idx="${i}">
-              <span class="search-item-icon">📍</span>
-              <span class="search-item-name">${r.name}</span>
-            </div>`
-            )
-            .join('');
-          searchResults.style.display = 'block';
-        } else {
-          searchResults.innerHTML =
-            '<div class="map-search-empty">未找到相关地址</div>';
-          searchResults.style.display = 'block';
-        }
+      searchInput._debounceTimer = setTimeout(function () {
+        performSearch();
       }, 400);
     });
 
-    // 按 Enter 键 → 跳转到第一个搜索结果
-    searchInput?.addEventListener('keydown', (e) => {
+    // Enter 键：有结果时跳转第一个，没结果时立即搜索
+    searchInput?.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
         e.preventDefault();
-        const firstResult = searchResults?.querySelector('.map-search-item');
-        if (firstResult) {
-          const lat = parseFloat(firstResult.dataset.lat);
-          const lng = parseFloat(firstResult.dataset.lng);
-          map.setView([lat, lng], 17, { animate: true });
-          searchResults.style.display = 'none';
-          searchInput.value = '';
-          searchClear.style.display = 'none';
+        if (searchResults.style.display === 'block' && searchResults.querySelector('.map-search-item')) {
+          jumpToFirstResult();
+        } else {
+          if (searchInput._debounceTimer) clearTimeout(searchInput._debounceTimer);
+          performSearch();
         }
       }
     });

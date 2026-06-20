@@ -892,6 +892,26 @@ body {
   color: #999;
   cursor: pointer;
   padding: 4px;
+  z-index: 2;
+}
+
+.map-search-btn {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 6px 8px;
+  z-index: 2;
+  border-radius: 50%;
+  transition: background 0.15s;
+}
+
+.map-search-btn:active {
+  background: #e0e0e0;
 }
 
 /* --- 搜索结果 --- */
