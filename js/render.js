@@ -1,126 +1,158 @@
 /**
- * 界面渲染模块
- * - 店铺列表渲染
- * - 店铺详情页渲染
- * - 关键词标签云
- * - 评论实图网格
+ * 界面渲染模块 — 小红书 × Apple × 美团 风格
+ * - Tailwind 工具类 + 自定义玻璃效果
+ * - Motion One 驱动入场动画
+ * - 店铺列表 / 详情页 / 评论 / 图片
+ *
+ * ⚠️ 所有 ID 和关键 class 与 app.js 保持一致，不可修改
  */
 
 const RenderModule = (() => {
 
   const appEl = document.getElementById('app');
 
+  // ==================== 动画工具 ====================
+
+  /** 列表卡片错落入场动画 */
+  async function animateCardEntrance() {
+    if (!window.Motion) return;
+    try {
+      const { animate, stagger } = window.Motion;
+      const cards = document.querySelectorAll('.shop-card');
+      if (!cards.length) return;
+      animate(
+        Array.from(cards),
+        { opacity: [0, 1], transform: ['translateY(16px)', 'translateY(0)'] },
+        { duration: 0.35, delay: stagger(0.05), easing: [0.25, 0.1, 0.25, 1] }
+      );
+    } catch (_) { /* Motion 未就绪，静默跳过 */ }
+  }
+
+  /** 弹窗弹性入场 */
+  async function animateModalIn(selector) {
+    if (!window.Motion) return;
+    try {
+      const { animate } = window.Motion;
+      const el = document.querySelector(selector);
+      if (!el) return;
+      animate(
+        el,
+        { scale: [0.6, 1], opacity: [0, 1] },
+        { type: 'spring', stiffness: 350, damping: 22, mass: 0.8 }
+      );
+    } catch (_) {}
+  }
+
+  /** 通用淡入 */
+  async function animateFadeIn(el) {
+    if (!window.Motion || !el) return;
+    try {
+      const { animate } = window.Motion;
+      animate(el, { opacity: [0, 1], transform: ['translateY(8px)', 'translateY(0)'] }, { duration: 0.3, easing: 'ease-out' });
+    } catch (_) {}
+  }
+
   // ==================== 工具栏 ====================
 
-  /** 渲染星星评分 */
-  function renderStars(rating, size = 'small') {
-    const full = Math.floor(rating);
-    const half = rating - full >= 0.5 ? 1 : 0;
-    const empty = 5 - full - half;
-    let html = '<span class="stars">';
-    for (let i = 0; i < full; i++) html += `<i class="star full">★</i>`;
-    if (half) html += `<i class="star half">☆</i>`;
-    for (let i = 0; i < empty; i++) html += `<i class="star empty">☆</i>`;
-    html += `</span>`;
+  function renderStars(rating, size) {
+    var sizeCls = size === 'large' ? 'star large text-[22px]' : 'text-[14px]';
+    var full = Math.floor(rating);
+    var half = rating - full >= 0.5 ? 1 : 0;
+    var empty = 5 - full - half;
+    var html = '<span class="stars ' + sizeCls + '">';
+    for (var i = 0; i < full; i++) html += '<i class="star full">★</i>';
+    if (half) html += '<i class="star half">☆</i>';
+    for (var j = 0; j < empty; j++) html += '<i class="star empty">☆</i>';
+    html += '</span>';
     return html;
   }
 
-  /** 生成排名徽章 */
   function getRankBadge(rank) {
-    if (rank === 1) return '<span class="rank-badge gold">🥇</span>';
-    if (rank === 2) return '<span class="rank-badge silver">🥈</span>';
-    if (rank === 3) return '<span class="rank-badge bronze">🥉</span>';
-    return `<span class="rank-badge normal">${rank}</span>`;
+    if (rank === 1) return '<span class="text-2xl">🥇</span>';
+    if (rank === 2) return '<span class="text-2xl">🥈</span>';
+    if (rank === 3) return '<span class="text-2xl">🥉</span>';
+    return '<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-black/5 text-xs font-extrabold text-[#AEAEB2]">' + rank + '</span>';
   }
 
-  // ==================== 列表页 ====================
+  // ==================== 欢迎页 ====================
 
-  /** 渲染欢迎页（未定位时显示） */
   function renderWelcomeScreen() {
-    appEl.innerHTML = `
-      <div class="page page-welcome">
-        <div class="welcome-content">
-          <div class="welcome-icon">🍜</div>
-          <h1 class="welcome-title">今天吃什么</h1>
-          <p class="welcome-desc">选择送餐地址，<br>从此告别选择困难症</p>
-          <div class="welcome-buttons">
-            <button class="btn-locate btn-gps" id="btnStartLocate">
-              <span class="btn-locate-icon">📍</span>
-              <span>使用我的位置</span>
-            </button>
-            <button class="btn-locate btn-map" id="btnOpenMap">
-              <span class="btn-locate-icon">🗺️</span>
-              <span>在地图上选位置</span>
-            </button>
-          </div>
-          <p class="welcome-hint">搜索范围：5公里</p>
-        </div>
-      </div>
-    `;
+    appEl.innerHTML =
+      '<div class="page min-h-screen flex items-center justify-center">' +
+        '<div class="text-center px-8 py-12">' +
+          '<div class="text-7xl mb-4" style="animation: welcomeBounce 1.5s ease infinite">🍜</div>' +
+          '<h1 class="text-[32px] font-extrabold text-[#1C1C1E] mb-2 tracking-wide">今天吃什么</h1>' +
+          '<p class="text-[15px] text-[#6E6E73] leading-relaxed mb-9">选择送餐地址，<br>从此告别选择困难症</p>' +
+          '<div class="flex flex-col gap-3 items-center">' +
+            '<button id="btnStartLocate" class="btn-locate inline-flex items-center gap-2.5 px-9 py-4 bg-gradient-to-br from-primary to-[#FF8C5A] text-white border-none rounded-full text-lg font-bold cursor-pointer shadow-glow tracking-wider">' +
+              '<span class="text-[22px]">📍</span>' +
+              '<span>使用我的位置</span>' +
+            '</button>' +
+            '<button id="btnOpenMap" class="btn-locate inline-flex items-center gap-2.5 px-9 py-4 glass rounded-full text-primary border-2 border-primary/20 text-lg font-bold cursor-pointer shadow-soft">' +
+              '<span class="text-[22px]">🗺️</span>' +
+              '<span>在地图上选位置</span>' +
+            '</button>' +
+          '</div>' +
+          '<p class="mt-5 text-xs text-[#AEAEB2]">搜索范围：5公里</p>' +
+        '</div>' +
+      '</div>';
   }
 
-  /** 渲染定位状态栏 */
+  // ==================== 列表页组件 ====================
+
   function renderLocationBar(userLocation, isManual, addressText) {
-    const addr = userLocation
-      ? `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}`
+    var addr = userLocation
+      ? userLocation.lat.toFixed(4) + ', ' + userLocation.lng.toFixed(4)
       : '';
-    const statusIcon = isManual ? '🗺️' : '📍';
-    const statusText = isManual
+    var statusIcon = isManual ? '🗺️' : '📍';
+    var statusText = isManual
       ? '手动选址 · 搜索范围 5km'
       : '已定位 · 搜索范围 5km';
 
-    return `
-      <div class="location-bar">
-        <div class="location-info">
-          <span class="location-icon">${statusIcon}</span>
-          <span class="location-text">${statusText}</span>
-          ${addressText ? `<span class="location-address">${addressText}</span>` : ''}
-          <span class="location-coords">${addr}</span>
-        </div>
-        <button class="btn-relocate" id="btnRelocate" title="重新选择位置">📍 换位置</button>
-      </div>
-    `;
+    return '' +
+      '<div class="glass rounded-2xl mx-3 mt-3 px-4 py-2.5 flex items-center justify-between gap-2 text-xs">' +
+        '<div class="flex items-center gap-1.5 flex-wrap min-w-0">' +
+          '<span class="text-base flex-shrink-0">' + statusIcon + '</span>' +
+          '<span class="text-[#6E6E73]">' + statusText + '</span>' +
+          (addressText ? '<span class="location-address text-[#6E6E73]">' + addressText + '</span>' : '') +
+          '<span class="text-[#AEAEB2] font-mono text-[11px]">' + addr + '</span>' +
+        '</div>' +
+        '<button id="btnRelocate" class="btn-relocate flex-shrink-0 px-3 py-1.5 bg-transparent border border-primary/30 rounded-2xl text-[11px] text-primary font-semibold cursor-pointer">📍 换位置</button>' +
+      '</div>';
   }
 
-  /** 渲染排序标签栏 */
   function renderSortTabs(currentSort) {
-    const tabs = [
+    var tabs = [
       { key: 'composite', label: '🏆 综合排序' },
-      { key: 'rating', label: '⭐ 评分优先' },
-      { key: 'distance', label: '📏 距离最近' },
+      { key: 'rating',    label: '⭐ 评分优先' },
+      { key: 'distance',  label: '📏 距离最近' },
     ];
 
-    return `
-      <div class="sort-tabs">
-        ${tabs
-          .map(
-            (t) => `
-          <button class="sort-tab ${t.key === currentSort ? 'active' : ''}"
-                  data-sort="${t.key}">
-            ${t.label}
-          </button>
-        `
-          )
-          .join('')}
-      </div>
-    `;
+    return '' +
+      '<div class="px-3 py-3 flex gap-2 sticky top-0 z-10">' +
+        tabs.map(function (t) {
+          var isActive = t.key === currentSort;
+          return '<button class="sort-tab flex-shrink-0 px-4 py-2 rounded-full text-[13px] font-semibold cursor-pointer transition-all ' +
+            (isActive
+              ? 'bg-gradient-to-br from-primary to-[#FF8C5A] text-white shadow-glow border-none'
+              : 'glass text-[#6E6E73] border border-white/60') +
+            '" data-sort="' + t.key + '">' + t.label + '</button>';
+        }).join('') +
+      '</div>';
   }
 
-  /** 渲染店铺统计摘要 */
   function renderSummary(shops) {
     var total = shops.length;
     var ratedShops = shops.filter(function (s) { return s.rating !== null && s.rating > 0; });
     var avgRating = ratedShops.length > 0
       ? (ratedShops.reduce(function (sum, s) { return sum + s.rating; }, 0) / ratedShops.length).toFixed(1)
       : '暂无';
-    return `
-      <div class="shop-summary">
-        附近 <strong>${total}</strong> 家店铺 · 有评分 <strong>${ratedShops.length}</strong> 家 · 均分 <strong>⭐${avgRating}</strong>
-      </div>
-    `;
+    return '' +
+      '<div class="px-4 py-2.5 text-xs text-[#6E6E73]">' +
+        '附近 <strong class="text-primary font-semibold">' + total + '</strong> 家 · 有评分 <strong class="text-primary font-semibold">' + ratedShops.length + '</strong> 家 · 均分 <strong class="text-accent font-semibold">⭐' + avgRating + '</strong>' +
+      '</div>';
   }
 
-  /** 格式化值：有值显示，无值显示"无" */
   function fmtVal(val, prefix, suffix) {
     prefix = prefix || '';
     suffix = suffix || '';
@@ -128,117 +160,105 @@ const RenderModule = (() => {
     return prefix + val + suffix;
   }
 
-  /** 渲染单张店铺卡片（仅真实数据） */
   function renderShopCard(shop) {
     var distStr = LocationModule.formatDistance(shop.distance);
 
-    // 评分：有真实评分显示星级，没有显示"暂无评分"
     var ratingHtml;
     if (shop.rating !== null && shop.rating > 0) {
-      ratingHtml = renderStars(shop.rating, 'small') + '<span class="shop-rating-num">' + shop.rating + '</span>';
+      ratingHtml = renderStars(shop.rating, 'small') + '<span class="text-accent font-bold text-sm ml-1">' + shop.rating + '</span>';
     } else {
-      ratingHtml = '<span class="shop-rating-num no-data">暂无评分</span>';
+      ratingHtml = '<span class="text-[#AEAEB2] text-xs">暂无评分</span>';
     }
 
-    // 人均：有数据展示，无数据显示"无"
     var priceHtml = shop.avgPrice !== null && shop.avgPrice > 0
       ? '💰 ¥' + shop.avgPrice + '/人'
       : '💰 人均暂无';
 
-    // 手动收藏徽章
     var manualBadge = shop.isManual
-      ? '<span class="shop-manual-badge" title="手动收藏的店铺">⭐收藏</span>'
+      ? '<span class="shop-manual-badge">⭐收藏</span>'
       : '';
 
-    // 标签（仅手动店铺有⭐收藏标签）
     var tagsHtml = '';
     if (shop.tags && shop.tags.length > 0) {
-      tagsHtml = '<div class="shop-tags">' +
-        shop.tags.map(function (t) { return '<span class="shop-tag">' + t + '</span>'; }).join('') +
+      tagsHtml = '<div class="flex gap-1.5 mb-2 flex-wrap">' +
+        shop.tags.map(function (t) { return '<span class="shop-tag inline-block text-[11px] px-2 py-0.5 rounded-md bg-primary-light text-primary font-medium">' + t + '</span>'; }).join('') +
         '</div>';
     }
 
-    return `
-      <div class="shop-card ${shop.isManual ? 'shop-card-manual' : ''}" data-shop-id="${shop.id}">
-        <div class="shop-card-header">
-          <div class="shop-rank">${getRankBadge(shop.rank)}</div>
-          <div class="shop-info">
-            <h3 class="shop-name">${shop.name} ${manualBadge}</h3>
-            <div class="shop-meta">
-              ${ratingHtml}
-            </div>
-          </div>
-          <div class="shop-arrow">›</div>
-        </div>
-        <div class="shop-card-footer">
-          ${tagsHtml}
-          <div class="shop-extra">
-            <span class="shop-distance">📍 ${distStr}</span>
-            <span class="shop-price">${priceHtml}</span>
-          </div>
-        </div>
-      </div>
-    `;
+    var catBadge = shop.category
+      ? '<span class="text-[11px] px-2 py-0.5 rounded-md bg-black/4 text-[#6E6E73] font-medium">' + shop.category + '</span>'
+      : '';
+
+    return '' +
+      '<div class="shop-card' + (shop.isManual ? ' shop-card-manual' : '') + ' glass rounded-3xl mx-3 mb-2.5 px-4 py-3.5 cursor-pointer shadow-soft" data-shop-id="' + shop.id + '">' +
+        '<div class="flex items-start gap-3">' +
+          /* 排名 */ '<div class="flex-shrink-0 w-9 text-center pt-1">' + getRankBadge(shop.rank) + '</div>' +
+          /* 信息 */ '<div class="flex-1 min-w-0">' +
+            '<h3 class="text-base font-bold text-[#1C1C1E] mb-1.5 truncate">' + shop.name + ' ' + manualBadge + '</h3>' +
+            '<div class="flex items-center gap-2 text-[13px] flex-wrap">' + ratingHtml + catBadge + '</div>' +
+          '</div>' +
+          /* 箭头 */ '<div class="text-2xl text-[#C7C7CC] pt-1 flex-shrink-0">›</div>' +
+        '</div>' +
+        '<div class="mt-2.5 pt-2.5 border-t border-dashed border-black/5">' +
+          tagsHtml +
+          '<div class="flex items-center gap-3 text-xs text-[#6E6E73] flex-wrap">' +
+            '<span>📍 ' + distStr + '</span>' +
+            '<span>' + priceHtml + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
   }
 
-  /** 渲染「🎲 随机推荐」按钮 */
   function renderRandomButton() {
-    return `
-      <div class="btn-random-wrap">
-        <button class="btn-random" id="btnRandomPick">
-          <span class="btn-random-icon">🎲</span>
-          <span>摇一摇 / 随机推荐</span>
-        </button>
-        <span class="btn-random-shake-hint">📱 摇一摇手机也能触发</span>
-      </div>
-    `;
+    return '' +
+      '<div class="text-center px-4 pt-3 pb-1">' +
+        '<button id="btnRandomPick" class="inline-flex items-center gap-2 px-7 py-3 bg-gradient-to-br from-[#667eea] to-[#764ba2] text-white border-none rounded-full text-base font-bold cursor-pointer tracking-wider" style="animation: randomPulse 2s ease-in-out infinite">' +
+          '<span class="text-xl">🎲</span>' +
+          '<span>摇一摇 / 随机推荐</span>' +
+        '</button>' +
+        '<span class="block text-center text-[11px] text-[#AEAEB2] mt-1.5">📱 摇一摇手机也能触发</span>' +
+      '</div>';
   }
 
-  /** 渲染「➕ 手动添加店铺」按钮 */
   function renderAddShopButton() {
-    return `
-      <div class="btn-add-shop-wrap">
-        <button class="btn-add-shop" id="btnAddShop">
-          ➕ 手动添加一家店铺
-        </button>
-      </div>
-    `;
+    return '' +
+      '<div class="text-center px-4 pb-6 pt-2">' +
+        '<button id="btnAddShop" class="inline-flex items-center gap-1.5 px-6 py-2.5 glass rounded-full text-sm text-primary font-semibold cursor-pointer border-2 border-dashed border-primary/30 hover:bg-primary-light/50 transition-all active:scale-95">' +
+          '➕ 手动添加一家店铺' +
+        '</button>' +
+      '</div>';
   }
 
-  /** 渲染列表加载中状态 */
   function renderLoadingState(userLocation, isManual) {
     var locIcon = isManual ? '🗺️' : '📍';
     var locText = isManual ? '手动选址 · 搜索范围 5km' : '已定位 · 搜索范围 5km';
-    return `
-      <div class="page page-list">
-        <header class="app-header">
-          <h1 class="app-title">🍜 今天吃什么</h1>
-          <p class="app-subtitle">正在搜索周边店铺…</p>
-        </header>
-        <div class="location-bar">
-          <div class="location-info">
-            <span class="location-icon">${locIcon}</span>
-            <span class="location-text">${locText}</span>
-          </div>
-        </div>
-        <div class="loading-spinner-wrap">
-          <div class="loading-spinner"></div>
-          <p class="loading-text">🔍 正在拉取周边 5km 全部餐饮店铺（自动翻页）…</p>
-        </div>
-      </div>
-    `;
+    appEl.innerHTML =
+      '<div class="page min-h-screen">' +
+        /* Header */ '<div class="bg-gradient-to-br from-primary to-[#FF8C5A] text-white text-center px-5 py-7">' +
+          '<h1 class="text-[26px] font-extrabold tracking-wide">🍜 今天吃什么</h1>' +
+          '<p class="text-[13px] opacity-80 mt-1">正在搜索周边店铺…</p>' +
+        '</div>' +
+        /* Location bar */ '<div class="glass mx-3 mt-3 rounded-2xl px-4 py-2.5 flex items-center gap-2 text-xs">' +
+          '<span class="text-base">' + locIcon + '</span>' +
+          '<span class="text-[#6E6E73]">' + locText + '</span>' +
+        '</div>' +
+        /* Spinner */ '<div class="flex flex-col items-center justify-center py-16 text-center">' +
+          '<div class="w-11 h-11 border-4 border-black/5 border-t-primary rounded-full mb-4" style="animation: spinnerRotate 0.8s linear infinite"></div>' +
+          '<p class="text-sm text-[#6E6E73]" style="animation: shimmerPulse 1.5s ease-in-out infinite">🔍 正在拉取周边 5km 全部餐饮店铺…</p>' +
+        '</div>' +
+      '</div>';
   }
 
-  /** 渲染数据来源说明 */
   function renderDataSourceInfo(poiCount, manualCount) {
     var parts = [];
-    if (poiCount > 0) parts.push('<span class="ds-badge ds-poi">📡 高德 ' + poiCount + ' 家</span>');
-    if (manualCount > 0) parts.push('<span class="ds-badge ds-manual">⭐ 收藏 ' + manualCount + ' 家</span>');
+    if (poiCount > 0) parts.push('<span class="inline-block text-[11px] px-2.5 py-0.5 rounded-full bg-[#E3F2FD] text-[#1565C0] font-medium">📡 高德 ' + poiCount + ' 家</span>');
+    if (manualCount > 0) parts.push('<span class="inline-block text-[11px] px-2.5 py-0.5 rounded-full bg-[#FFF8E1] text-[#E65100] font-medium">⭐ 收藏 ' + manualCount + ' 家</span>');
     if (!parts.length) return '';
-    return '<div class="data-source-info">' + parts.join(' ') + '</div>';
+    return '<div class="flex gap-2 px-4 py-1.5 flex-wrap">' + parts.join(' ') + '</div>';
   }
 
-  /** 渲染完整列表页 */
+  // ==================== 列表页主体 ====================
+
   function renderShopList(shops, userLocation, hasError, currentSort, isManual, addressText, poiCount, manualCount) {
     var locBar = renderLocationBar(userLocation, isManual, addressText);
     var sortTabs = renderSortTabs(currentSort);
@@ -248,214 +268,175 @@ const RenderModule = (() => {
     var addBtn = renderAddShopButton();
     var dsInfo = renderDataSourceInfo(poiCount || 0, manualCount || 0);
 
-    appEl.innerHTML = `
-      <div class="page page-list">
-        <header class="app-header">
-          <h1 class="app-title">🍜 今天吃什么</h1>
-          <p class="app-subtitle">从此告别选择困难症</p>
-        </header>
-        ${locBar}
-        ${dsInfo}
-        ${sortTabs}
-        ${randomBtn}
-        <div class="shop-list-container">
-          ${summary}
-          <div class="shop-list">
-            ${cards}
-          </div>
-          ${shops.length === 0 ? '<div class="empty-state">😢 5公里范围内暂无店铺<br><small>试试移动地图位置，或者手动添加一家</small></div>' : ''}
-        </div>
-        ${addBtn}
-        <p class="data-source-note">数据来源于高德地图</p>
-      </div>
-    `;
+    appEl.innerHTML =
+      '<div class="page page-list min-h-screen pb-4">' +
+        /* Header */ '<header class="bg-gradient-to-br from-primary to-[#FF8C5A] text-white text-center px-5 pt-7 pb-6">' +
+          '<h1 class="text-[26px] font-extrabold tracking-wide">🍜 今天吃什么</h1>' +
+          '<p class="text-[13px] opacity-80 mt-1">从此告别选择困难症</p>' +
+        '</header>' +
+        locBar +
+        dsInfo +
+        sortTabs +
+        randomBtn +
+        '<div class="mt-2">' +
+          summary +
+          '<div class="flex flex-col gap-2.5 pb-2">' + cards + '</div>' +
+          (shops.length === 0 ? '<div class="text-center py-16 text-base text-[#AEAEB2]">😢 5公里范围内暂无店铺<br><small>试试移动地图位置，或者手动添加一家</small></div>' : '') +
+        '</div>' +
+        addBtn +
+        '<p class="data-source-note">数据来源于高德地图</p>' +
+      '</div>';
+
+    // 卡片错落入场动画
+    setTimeout(function () { animateCardEntrance(); }, 50);
   }
 
   // ==================== 详情页 ====================
 
-  /** 渲染好评关键词 */
   function renderPosKeywords(keywords) {
     if (!keywords || !keywords.length) return '';
-    return `
-      <div class="keyword-section positive">
-        <h4 class="keyword-title">👍 好评关键词</h4>
-        <div class="keyword-cloud">
-          ${keywords.map((k) => `<span class="keyword-tag positive">${k}</span>`).join('')}
-        </div>
-      </div>
-    `;
+    return '' +
+      '<div class="glass rounded-3xl p-4 mt-2.5">' +
+        '<h4 class="text-[15px] font-bold mb-2.5">👍 好评关键词</h4>' +
+        '<div class="flex flex-wrap gap-2">' +
+          keywords.map(function (k) { return '<span class="px-3 py-1.5 rounded-full text-[13px] font-medium bg-[#E8F8EF] text-positive border border-positive/20 active:scale-95 transition-transform">' + k + '</span>'; }).join('') +
+        '</div>' +
+      '</div>';
   }
 
-  /** 渲染差评关键词 */
   function renderNegKeywords(keywords) {
     if (!keywords || !keywords.length) return '';
-    return `
-      <div class="keyword-section negative">
-        <h4 class="keyword-title">👎 差评关键词</h4>
-        <div class="keyword-cloud">
-          ${keywords.map((k) => `<span class="keyword-tag negative">${k}</span>`).join('')}
-        </div>
-      </div>
-    `;
+    return '' +
+      '<div class="glass rounded-3xl p-4 mt-2.5">' +
+        '<h4 class="text-[15px] font-bold mb-2.5">👎 差评关键词</h4>' +
+        '<div class="flex flex-wrap gap-2">' +
+          keywords.map(function (k) { return '<span class="px-3 py-1.5 rounded-full text-[13px] font-medium bg-[#FDECEC] text-negative border border-negative/20 active:scale-95 transition-transform">' + k + '</span>'; }).join('') +
+        '</div>' +
+      '</div>';
   }
 
-  /** 收集所有评论中的图片 */
   function collectReviewImages(reviews) {
-    const images = [];
-    reviews.forEach((review) => {
-      review.images.forEach((img) => {
+    var images = [];
+    reviews.forEach(function (review) {
+      review.images.forEach(function (img) {
         images.push({ url: img, userName: review.userName, content: review.content });
       });
     });
     return images;
   }
 
-  /** 渲染评论区实图网格 */
   function renderReviewImages(images) {
     if (!images.length) return '';
-    // 最多显示 9 张
-    const displayImages = images.slice(0, 9);
-    return `
-      <div class="review-images-section">
-        <h4 class="section-title">📸 评论区菜品实拍（${images.length}张）</h4>
-        <div class="images-grid">
-          ${displayImages
-            .map(
-              (img, i) => `
-            <div class="image-card" data-index="${i}">
-              <img src="${img.url}" alt="菜品实拍" loading="lazy" />
-              <div class="image-overlay">
-                <span class="image-author">@${img.userName}</span>
-              </div>
-            </div>
-          `
-            )
-            .join('')}
-          ${images.length > 9 ? `<div class="image-card more-images">+${images.length - 9}张</div>` : ''}
-        </div>
-      </div>
-    `;
+    var displayImages = images.slice(0, 9);
+    return '' +
+      '<div class="glass rounded-3xl p-4 mt-2.5">' +
+        '<h4 class="text-[15px] font-bold mb-3">📸 评论区菜品实拍（' + images.length + '张）</h4>' +
+        '<div class="grid grid-cols-3 gap-1.5">' +
+          displayImages.map(function (img, i) {
+            return '<div class="aspect-square rounded-xl overflow-hidden cursor-pointer bg-black/5 relative" data-index="' + i + '">' +
+              '<img src="' + img.url + '" alt="菜品实拍" loading="lazy" class="w-full h-full object-cover transition-transform duration-300 active:scale-105" />' +
+              '<div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-1.5 text-[10px] text-white opacity-0 hover:opacity-100 transition-opacity">@' + img.userName + '</div>' +
+            '</div>';
+          }).join('') +
+          (images.length > 9 ? '<div class="aspect-square rounded-xl flex items-center justify-center bg-black/5 text-sm font-bold text-[#6E6E73]">+' + (images.length - 9) + '张</div>' : '') +
+        '</div>' +
+      '</div>';
   }
 
-  /** 渲染评论区 */
   function renderReviews(reviews) {
-    return `
-      <div class="reviews-section">
-        <h4 class="section-title">💬 用户评论（${reviews.length}条）</h4>
-        <div class="reviews-list">
-          ${reviews
-            .map(
-              (r) => `
-            <div class="review-card">
-              <div class="review-header">
-                <div class="review-user">
-                  <div class="review-avatar">${r.avatar}</div>
-                  <div>
-                    <div class="review-username">${r.userName}</div>
-                    <div class="review-date">${r.date}</div>
-                  </div>
-                </div>
-                <div class="review-rating">${renderStars(r.rating, 'small')}</div>
-              </div>
-              <p class="review-content">${r.content}</p>
-              ${
-                r.images.length
-                  ? `<div class="review-mini-images">
-                      ${r.images
-                        .map(
-                          (img) =>
-                            `<img src="${img}" alt="配图" loading="lazy" class="review-thumb" />`
-                        )
-                        .join('')}
-                    </div>`
-                  : ''
-              }
-            </div>
-          `
-            )
-            .join('')}
-        </div>
-      </div>
-    `;
+    return '' +
+      '<div class="glass rounded-3xl p-4 mt-2.5">' +
+        '<h4 class="text-[15px] font-bold mb-3">💬 用户评论（' + reviews.length + '条）</h4>' +
+        '<div class="flex flex-col gap-3.5">' +
+          reviews.map(function (r) {
+            return '<div class="pb-3.5 border-b border-black/5 last:border-b-0 last:pb-0">' +
+              '<div class="flex justify-between items-start mb-2">' +
+                '<div class="flex items-center gap-2.5">' +
+                  '<div class="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-[#FF8C5A] text-white flex items-center justify-center text-sm font-bold flex-shrink-0">' + r.avatar + '</div>' +
+                  '<div>' +
+                    '<div class="text-sm font-semibold">' + r.userName + '</div>' +
+                    '<div class="text-[11px] text-[#AEAEB2]">' + r.date + '</div>' +
+                  '</div>' +
+                '</div>' +
+                '<div class="text-xs">' + renderStars(r.rating, 'small') + '</div>' +
+              '</div>' +
+              '<p class="text-sm leading-relaxed text-[#1C1C1E] mb-2">' + r.content + '</p>' +
+              (r.images.length
+                ? '<div class="flex gap-1.5 overflow-x-auto">' +
+                    r.images.map(function (img) {
+                      return '<img src="' + img + '" alt="配图" loading="lazy" class="w-20 h-20 rounded-lg object-cover cursor-pointer flex-shrink-0" />';
+                    }).join('') +
+                  '</div>'
+                : '') +
+            '</div>';
+          }).join('') +
+        '</div>' +
+      '</div>';
   }
 
-  /** 渲染完整详情页（仅真实数据） */
   function renderShopDetail(shop) {
     var distStr = LocationModule.formatDistance(shop.distance);
 
-    // 评分
     var ratingHtml;
     if (shop.rating !== null && shop.rating > 0) {
-      ratingHtml = renderStars(shop.rating, 'large') + '<span class="detail-rating-num">' + shop.rating + '</span>';
+      ratingHtml = renderStars(shop.rating, 'large') + '<span class="text-[22px] font-extrabold text-accent ml-1">' + shop.rating + '</span>';
     } else {
-      ratingHtml = '<span class="detail-rating-num no-data">暂无评分</span>';
+      ratingHtml = '<span class="text-[#AEAEB2] text-sm">暂无评分</span>';
     }
 
-    // 基本信息行（只显示有数据的字段）
-    var infoItems = [];
-    infoItems.push('<div class="info-item">📍 ' + distStr + '</div>');
+    var infoItems = '';
+    infoItems += '<div class="glass rounded-2xl px-4 py-2.5 text-[13px] text-[#6E6E73]">📍 ' + distStr + '</div>';
     if (shop.avgPrice !== null && shop.avgPrice > 0) {
-      infoItems.push('<div class="info-item">💰 ¥' + shop.avgPrice + '/人</div>');
+      infoItems += '<div class="glass rounded-2xl px-4 py-2.5 text-[13px] text-[#6E6E73]">💰 ¥' + shop.avgPrice + '/人</div>';
     } else {
-      infoItems.push('<div class="info-item">💰 人均暂无</div>');
+      infoItems += '<div class="glass rounded-2xl px-4 py-2.5 text-[13px] text-[#6E6E73]">💰 人均暂无</div>';
     }
     if (shop.address) {
-      infoItems.push('<div class="info-item">🏠 ' + shop.address + '</div>');
+      infoItems += '<div class="glass rounded-2xl px-4 py-2.5 text-[13px] text-[#6E6E73] col-span-2">🏠 ' + shop.address + '</div>';
     }
 
-    // 分类标签
     var tagsHtml = '';
     if (shop.tags && shop.tags.length > 0) {
-      tagsHtml = '<div class="detail-shop-tags">' +
-        shop.tags.map(function (t) { return '<span class="shop-tag">' + t + '</span>'; }).join('') +
+      tagsHtml = '<div class="flex gap-1.5 mb-3 flex-wrap">' +
+        shop.tags.map(function (t) { return '<span class="shop-tag inline-block text-[11px] px-2 py-0.5 rounded-md bg-primary-light text-primary font-medium">' + t + '</span>'; }).join('') +
         '</div>';
     }
 
-    // 真实店铺照片
     var photosHtml = '';
     if (shop.realPhotos && shop.realPhotos.length > 0) {
-      photosHtml = `
-        <div class="detail-section">
-          <h3 class="detail-section-title">📷 店铺实拍（${shop.realPhotos.length}张）</h3>
-          <div class="detail-photo-grid">
-            ${shop.realPhotos.map(function (url, i) {
+      photosHtml =
+        '<div class="detail-section">' +
+          '<h3 class="detail-section-title">📷 店铺实拍（' + shop.realPhotos.length + '张）</h3>' +
+          '<div class="detail-photo-grid">' +
+            shop.realPhotos.map(function (url, i) {
               return '<div class="detail-photo-item" data-photo-index="' + i + '"><img src="' + url + '" alt="店铺实拍" loading="lazy"></div>';
-            }).join('')}
-          </div>
-        </div>
-      `;
+            }).join('') +
+          '</div>' +
+        '</div>';
     } else {
-      photosHtml = '<div class="detail-section"><p class="no-data-hint">暂无店铺实拍照片</p></div>';
+      photosHtml = '<div class="glass rounded-3xl p-4 mt-2.5 text-center"><p class="text-sm text-[#AEAEB2] py-6">暂无店铺实拍照片</p></div>';
     }
 
-    appEl.innerHTML = `
-      <div class="page page-detail">
-        <div class="detail-nav">
-          <button class="btn-back" id="btnBack">← 返回</button>
-          <span class="detail-nav-title">店铺详情</span>
-          <span class="detail-nav-spacer"></span>
-        </div>
-
-        <div class="detail-header">
-          <h2 class="detail-shop-name">${shop.name}</h2>
-          <div class="detail-shop-meta">
-            ${ratingHtml}
-          </div>
-          ${tagsHtml}
-          <div class="detail-shop-info">
-            ${infoItems.join('')}
-          </div>
-        </div>
-
-        <div class="detail-body">
-          ${photosHtml}
-
-          <div class="detail-section">
-            <p class="data-source-note">数据来源于高德地图</p>
-          </div>
-        </div>
-      </div>
-    `;
+    appEl.innerHTML =
+      '<div class="page page-detail min-h-screen pb-20">' +
+        /* 导航 */ '<div class="glass-strong sticky top-0 z-10 px-4 py-3 flex items-center justify-between border-b border-black/5">' +
+          '<button id="btnBack" class="bg-transparent border-none text-base text-primary font-semibold cursor-pointer px-2 py-1">← 返回</button>' +
+          '<span class="text-[15px] font-bold text-[#1C1C1E]">店铺详情</span>' +
+          '<span class="w-[50px]"></span>' +
+        '</div>' +
+        /* 店名头 */ '<div class="glass rounded-3xl mx-3 mt-3 p-5">' +
+          '<h2 class="text-[22px] font-extrabold text-[#1C1C1E] mb-2">' + shop.name + '</h2>' +
+          '<div class="flex items-center gap-2 mb-2">' + ratingHtml + '</div>' +
+          tagsHtml +
+          '<div class="grid grid-cols-2 gap-2.5">' + infoItems + '</div>' +
+        '</div>' +
+        /* 内容 */ '<div class="px-3">' +
+          photosHtml +
+          '<div class="text-center pt-3 pb-6">' +
+            '<p class="text-xs text-[#AEAEB2]">数据来源于高德地图</p>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
 
     // 绑定实拍照片点击查看大图
     setTimeout(function () {
@@ -474,45 +455,41 @@ const RenderModule = (() => {
 
   // ==================== 随机推荐弹窗 ====================
 
-  /** 渲染随机推荐弹窗（老虎机风格），创建 DOM 元素添加到 body */
   function renderRandomPicker() {
-    const el = document.createElement('div');
+    var el = document.createElement('div');
     el.className = 'random-overlay';
     el.id = 'randomOverlay';
-    el.innerHTML = `
-      <div class="random-backdrop"></div>
-      <div class="random-card">
-        <div class="random-emoji">🎲</div>
-        <div class="random-title"> destiny is choosing…</div>
-        <div class="random-slot" id="randomSlot"></div>
-        <div class="random-result" id="randomResult" style="display:none">
-          <div class="random-result-name" id="randomResultName"></div>
-          <div class="random-result-meta" id="randomResultMeta"></div>
-          <div class="random-result-tags" id="randomResultTags"></div>
-        </div>
-        <div class="random-actions" id="randomActions" style="display:none">
-          <button class="random-btn random-btn-retry" id="btnRandomRetry">🔄 换一个</button>
-          <button class="random-btn random-btn-go" id="btnRandomGo">👉 就这家！</button>
-        </div>
-      </div>
-    `;
+    el.innerHTML =
+      '<div class="random-backdrop"></div>' +
+      '<div class="random-card">' +
+        '<div class="random-emoji" style="animation: diceFloat 0.8s ease-in-out infinite">🎲</div>' +
+        '<div class="random-title">✨ destiny is choosing…</div>' +
+        '<div class="random-slot" id="randomSlot"></div>' +
+        '<div class="random-result" id="randomResult" style="display:none">' +
+          '<div class="random-result-name" id="randomResultName"></div>' +
+          '<div class="random-result-meta" id="randomResultMeta"></div>' +
+          '<div class="random-result-tags" id="randomResultTags"></div>' +
+        '</div>' +
+        '<div class="random-actions" id="randomActions" style="display:none">' +
+          '<button class="random-btn random-btn-retry" id="btnRandomRetry">🔄 换一个</button>' +
+          '<button class="random-btn random-btn-go" id="btnRandomGo">👉 就这家！</button>' +
+        '</div>' +
+      '</div>';
     document.body.appendChild(el);
+
+    // 弹性入场
+    setTimeout(function () { animateModalIn('.random-card'); }, 30);
+
     return el;
   }
 
-  /** 关闭随机推荐弹窗 */
   function closeRandomPicker() {
-    const el = document.getElementById('randomOverlay');
+    var el = document.getElementById('randomOverlay');
     if (el) el.remove();
   }
 
   // ==================== 手动添加店铺表单 ====================
 
-  /**
-   * 渲染添加店铺弹窗表单
-   * @param {Object} defaultLocation - {lat, lng} 默认坐标
-   * @param {Array} categories - 分类选项列表
-   */
   function renderAddShopForm(defaultLocation, categories) {
     var el = document.createElement('div');
     el.className = 'add-shop-overlay';
@@ -522,54 +499,53 @@ const RenderModule = (() => {
       return '<option value="' + c + '">' + c + '</option>';
     }).join('');
 
-    el.innerHTML = `
-      <div class="add-shop-backdrop"></div>
-      <div class="add-shop-card">
-        <div class="add-shop-header">
-          <h3>➕ 添加收藏店铺</h3>
-          <button class="add-shop-close" id="btnAddShopClose">✕</button>
-        </div>
-        <div class="add-shop-body">
-          <div class="add-shop-field">
-            <label>店铺名称 <span class="required">*</span></label>
-            <input type="text" id="addShopName" placeholder="例如：老张黄焖鸡米饭" maxlength="30" />
-          </div>
-          <div class="add-shop-field">
-            <label>分类</label>
-            <select id="addShopCategory">${catOptions}</select>
-          </div>
-          <div class="add-shop-row">
-            <div class="add-shop-field add-shop-half">
-              <label>评分</label>
-              <select id="addShopRating">
-                <option value="5.0">⭐ 5.0</option>
-                <option value="4.5">⭐ 4.5</option>
-                <option value="4.0" selected>⭐ 4.0</option>
-                <option value="3.5">⭐ 3.5</option>
-                <option value="3.0">⭐ 3.0</option>
-              </select>
-            </div>
-            <div class="add-shop-field add-shop-half">
-              <label>人均价格（元）</label>
-              <input type="number" id="addShopPrice" placeholder="25" min="1" max="500" value="25" />
-            </div>
-          </div>
-          <div class="add-shop-field">
-            <label>标签（逗号分隔）</label>
-            <input type="text" id="addShopTags" placeholder="好吃, 分量足, 推荐" maxlength="60" />
-          </div>
-          <div class="add-shop-field">
-            <label>地址描述（可选）</label>
-            <input type="text" id="addShopAddress" placeholder="例如：小区门口左转50米" maxlength="80" />
-          </div>
-          <p class="add-shop-hint">📍 位置将设为当前地图中心点</p>
-        </div>
-        <div class="add-shop-footer">
-          <button class="add-shop-btn-cancel" id="btnAddShopCancel">取消</button>
-          <button class="add-shop-btn-save" id="btnAddShopSave">💾 保存</button>
-        </div>
-      </div>
-    `;
+    el.innerHTML =
+      '<div class="add-shop-backdrop"></div>' +
+      '<div class="add-shop-card" style="animation: slideUp 0.35s cubic-bezier(0.32, 0.72, 0, 1)">' +
+        '<div class="add-shop-header">' +
+          '<h3>➕ 添加收藏店铺</h3>' +
+          '<button class="add-shop-close" id="btnAddShopClose">✕</button>' +
+        '</div>' +
+        '<div class="add-shop-body">' +
+          '<div class="add-shop-field">' +
+            '<label>店铺名称 <span class="required">*</span></label>' +
+            '<input type="text" id="addShopName" placeholder="例如：老张黄焖鸡米饭" maxlength="30" />' +
+          '</div>' +
+          '<div class="add-shop-field">' +
+            '<label>分类</label>' +
+            '<select id="addShopCategory">' + catOptions + '</select>' +
+          '</div>' +
+          '<div class="add-shop-row">' +
+            '<div class="add-shop-field add-shop-half">' +
+              '<label>评分</label>' +
+              '<select id="addShopRating">' +
+                '<option value="5.0">⭐ 5.0</option>' +
+                '<option value="4.5">⭐ 4.5</option>' +
+                '<option value="4.0" selected>⭐ 4.0</option>' +
+                '<option value="3.5">⭐ 3.5</option>' +
+                '<option value="3.0">⭐ 3.0</option>' +
+              '</select>' +
+            '</div>' +
+            '<div class="add-shop-field add-shop-half">' +
+              '<label>人均价格（元）</label>' +
+              '<input type="number" id="addShopPrice" placeholder="25" min="1" max="500" value="25" />' +
+            '</div>' +
+          '</div>' +
+          '<div class="add-shop-field">' +
+            '<label>标签（逗号分隔）</label>' +
+            '<input type="text" id="addShopTags" placeholder="好吃, 分量足, 推荐" maxlength="60" />' +
+          '</div>' +
+          '<div class="add-shop-field">' +
+            '<label>地址描述（可选）</label>' +
+            '<input type="text" id="addShopAddress" placeholder="例如：小区门口左转50米" maxlength="80" />' +
+          '</div>' +
+          '<p class="add-shop-hint">📍 位置将设为当前地图中心点</p>' +
+        '</div>' +
+        '<div class="add-shop-footer">' +
+          '<button class="add-shop-btn-cancel" id="btnAddShopCancel">取消</button>' +
+          '<button class="add-shop-btn-save" id="btnAddShopSave">💾 保存</button>' +
+        '</div>' +
+      '</div>';
     document.body.appendChild(el);
 
     // 关闭按钮
@@ -588,32 +564,31 @@ const RenderModule = (() => {
   // ==================== 图片查看器 ====================
 
   function renderImageViewer(images, currentIndex) {
-    const el = document.createElement('div');
+    var el = document.createElement('div');
     el.className = 'image-viewer';
-    el.innerHTML = `
-      <div class="viewer-backdrop"></div>
-      <div class="viewer-content">
-        <button class="viewer-close">✕</button>
-        <img src="${images[currentIndex].url}" alt="菜品大图" />
-        <div class="viewer-caption">@${images[currentIndex].userName}：${images[currentIndex].content.substring(0, 30)}…</div>
-      </div>
-      <button class="viewer-nav prev">‹</button>
-      <button class="viewer-nav next">›</button>
-    `;
+    el.innerHTML =
+      '<div class="viewer-backdrop"></div>' +
+      '<div class="viewer-content">' +
+        '<button class="viewer-close">✕</button>' +
+        '<img src="' + images[currentIndex].url + '" alt="菜品大图" />' +
+        '<div class="viewer-caption">@' + images[currentIndex].userName + '：' + images[currentIndex].content.substring(0, 30) + '…</div>' +
+      '</div>' +
+      '<button class="viewer-nav prev">‹</button>' +
+      '<button class="viewer-nav next">›</button>';
 
-    el.querySelector('.viewer-backdrop').addEventListener('click', () => el.remove());
-    el.querySelector('.viewer-close').addEventListener('click', () => el.remove());
+    el.querySelector('.viewer-backdrop').addEventListener('click', function () { el.remove(); });
+    el.querySelector('.viewer-close').addEventListener('click', function () { el.remove(); });
 
-    el.querySelector('.viewer-nav.prev').addEventListener('click', (e) => {
+    el.querySelector('.viewer-nav.prev').addEventListener('click', function (e) {
       e.stopPropagation();
-      const newIdx = (currentIndex - 1 + images.length) % images.length;
+      var newIdx = (currentIndex - 1 + images.length) % images.length;
       el.remove();
       renderImageViewer(images, newIdx);
     });
 
-    el.querySelector('.viewer-nav.next').addEventListener('click', (e) => {
+    el.querySelector('.viewer-nav.next').addEventListener('click', function (e) {
       e.stopPropagation();
-      const newIdx = (currentIndex + 1) % images.length;
+      var newIdx = (currentIndex + 1) % images.length;
       el.remove();
       renderImageViewer(images, newIdx);
     });
@@ -621,16 +596,18 @@ const RenderModule = (() => {
     document.body.appendChild(el);
   }
 
+  // ==================== 导出 ====================
+
   return {
-    renderWelcomeScreen,
-    renderShopList,
-    renderLoadingState,
-    renderShopDetail,
-    renderImageViewer,
-    renderRandomPicker,
-    closeRandomPicker,
-    renderAddShopForm,
-    closeAddShopForm,
-    renderDataSourceInfo,
+    renderWelcomeScreen: renderWelcomeScreen,
+    renderShopList: renderShopList,
+    renderLoadingState: renderLoadingState,
+    renderShopDetail: renderShopDetail,
+    renderImageViewer: renderImageViewer,
+    renderRandomPicker: renderRandomPicker,
+    closeRandomPicker: closeRandomPicker,
+    renderAddShopForm: renderAddShopForm,
+    closeAddShopForm: closeAddShopForm,
+    renderDataSourceInfo: renderDataSourceInfo,
   };
 })();

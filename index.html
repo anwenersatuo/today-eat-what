@@ -7,12 +7,49 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>🍜 今天吃什么</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍜</text></svg>" />
+
+  <!-- Tailwind CSS Play CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#FF6B35',
+            'primary-dark': '#E55A2B',
+            'primary-light': '#FFF0EB',
+            accent: '#F5A623',
+            positive: '#34C759',
+            negative: '#E74C3C',
+          },
+          borderRadius: {
+            '2xl': '16px',
+            '3xl': '20px',
+            '4xl': '24px',
+          },
+          boxShadow: {
+            'soft': '0 4px 24px rgba(0, 0, 0, 0.06)',
+            'soft-lg': '0 8px 40px rgba(0, 0, 0, 0.08)',
+            'glow': '0 4px 20px rgba(255, 107, 53, 0.35)',
+            'glow-lg': '0 6px 32px rgba(255, 107, 53, 0.45)',
+          },
+        }
+      }
+    }
+  </script>
+
+  <!-- Motion One (vanilla JS animation, same team as Framer Motion) -->
+  <script type="module">
+    import { animate, stagger, spring, timeline, inView } from "https://cdn.jsdelivr.net/npm/motion@11/+esm";
+    window.Motion = { animate, stagger, spring, timeline, inView };
+  </script>
+
   <!-- Leaflet 地图 -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <div id="app"></div>
+  <div id="app" class="max-w-[480px] mx-auto min-h-screen bg-[#F8F6F3] relative overflow-x-hidden"></div>
 
   <!-- Leaflet 地图库 -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
