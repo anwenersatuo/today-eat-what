@@ -220,11 +220,13 @@ const LocationModule = (() => {
 
     try {
       // 构建基础 URL（不含 page 参数，后续逐页拼接）
+      // extensions=all 让高德返回完整数据：真实评分、实拍照片、商圈、电话等
       var baseUrl = 'https://restapi.amap.com/v3/place/around?key=' + AMAP_KEY +
         '&location=' + lng + ',' + lat +
         '&radius=' + Math.round(radiusKm * 1000) +
         '&types=050000' +
-        '&offset=' + PER_PAGE;
+        '&offset=' + PER_PAGE +
+        '&extensions=all';
 
       // 第 1 页：拿到首批数据 + 总数
       var firstData = await apiRequest(baseUrl + '&page=1', 8000);
@@ -383,12 +385,97 @@ const LocationModule = (() => {
     return SEARCH_RADIUS_KM;
   }
 
+  /**
+   * POI 详情查询：单个店铺的真实评分、照片、电话、营业时间
+   * 使用高德 /v3/place/detail API
+   * @param {string} poiId - 高德 POI ID
+   * @returns {Promise<Object|null>} 详情数据或 null
+   */
+  async function getPoiDetail(poiId) {
+    try {
+      var url = 'https://restapi.amap.com/v3/place/detail?key=' + AMAP_KEY +
+        '&id=' + poiId;
+      var data = await apiRequest(url, 6000);
+      if (data.status === '1' && data.pois && data.pois.length > 0) {
+        return data.pois[0];
+      }
+      return null;
+    } catch (err) {
+      console.warn('POI详情获取失败（' + poiId + '）：', err.message);
+      return null;
+    }
+  }
+
+  /**
+   * 批量补全 POI 数据：对没有真实评分的 POI，调详情 API 获取
+   *
+   * 高德周边搜索虽然加了 extensions=all，但部分店铺
+   * biz_ext.rating 仍为空。此函数筛选出无评分的 POI，
+   * 批量调详情 API 补全（每组 5 个并发，上限 40 个）。
+   *
+   * @param {Array} pois - searchNearbyPois 返回的原始 POI 数组
+   * @returns {Promise<Array>} 补全后的 POI 数组（原地修改 + 返回）
+   */
+  async function enrichPois(pois) {
+    if (!pois || pois.length === 0) return pois;
+
+    // 筛选出没有真实评分的 POI
+    var needEnrich = [];
+    for (var i = 0; i < pois.length; i++) {
+      var poi = pois[i];
+      var hasRating = poi.biz_ext && poi.biz_ext.rating;
+      var hasPhotos = poi.photos && poi.photos.length > 0;
+      // 有评分且有照片 → 跳过；否则需要补全
+      if (!hasRating || !hasPhotos) {
+        needEnrich.push({ index: i, poi: poi, needRating: !hasRating, needPhotos: !hasPhotos });
+      }
+    }
+
+    if (needEnrich.length === 0) {
+      console.log('所有POI均已有真实评分和照片，无需补全');
+      return pois;
+    }
+
+    // 最多补全 40 个（8组 × 5并发），控制 API 消耗
+    var toEnrich = needEnrich.slice(0, 40);
+    var CONCURRENCY = 5;
+
+    console.log('POI评分补全：' + toEnrich.length + ' 家需要补全（共' + needEnrich.length + '家缺失）');
+
+    // 分组并发
+    for (var batch = 0; batch < toEnrich.length; batch += CONCURRENCY) {
+      var batchItems = toEnrich.slice(batch, batch + CONCURRENCY);
+      var batchPromises = batchItems.map(function (item) {
+        return getPoiDetail(item.poi.id).then(function (detail) {
+          if (detail) {
+            // 补充评分
+            if (item.needRating && detail.biz_ext && detail.biz_ext.rating) {
+              item.poi.biz_ext = item.poi.biz_ext || {};
+              item.poi.biz_ext.rating = detail.biz_ext.rating;
+            }
+            // 补充真实照片
+            if (item.needPhotos && detail.photos && detail.photos.length > 0) {
+              item.poi.photos = detail.photos;
+            }
+            console.log('✅ ' + item.poi.name + ' 评分补全：' +
+              (item.poi.biz_ext && item.poi.biz_ext.rating ? item.poi.biz_ext.rating : '无') +
+              ' | 照片：' + (item.poi.photos ? item.poi.photos.length + '张' : '无'));
+          }
+        });
+      });
+      await Promise.all(batchPromises);
+    }
+
+    return pois;
+  }
+
   return {
     getCurrentPosition,
     setManualLocation,
     reverseGeocode,
     geocode,
     searchNearbyPois,
+    enrichPois,
     haversineDistance,
     formatDistance,
     filterShopsByDistance,

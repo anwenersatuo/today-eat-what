@@ -437,9 +437,11 @@ const DataModule = (() => {
   var NEG_PROBLEMS = ['味道偏咸', '分量比之前少了', '口感一般', '太油腻了', '有点凉了', '汤洒了一些', '偏贵', '等待时间太长'];
 
   /** 为一间 POI 店铺生成模拟评论 */
-  function generateReviewsForShop(shopId, category) {
+  function generateReviewsForShop(shopId, category, realPhotos) {
+    realPhotos = realPhotos || [];
     var count = 3 + Math.floor(Math.random() * 5); // 3-7 条
     var reviews = [];
+    var photoIdx = 0;  // 真实照片分配游标
     var users = [
       { name: '吃货小王', avatar: '王' }, { name: '外卖达人', avatar: '李' },
       { name: '吃遍天下', avatar: '张' }, { name: '美食猎人', avatar: '吴' },
@@ -469,10 +471,18 @@ const DataModule = (() => {
         u = pick(users);
       }
 
+      // 配图：优先使用真实照片，用完后再用 picsum 随机图兜底
       var imgCount = Math.random() > 0.5 ? Math.floor(Math.random() * 3) + 1 : 0;
       var images = [];
       for (var j = 0; j < imgCount; j++) {
-        images.push('https://picsum.photos/seed/' + String(shopId) + '_r' + i + '_' + j + '/300/300');
+        if (photoIdx < realPhotos.length) {
+          // 用真实照片
+          images.push(realPhotos[photoIdx]);
+          photoIdx++;
+        } else {
+          // 真实照片用完，picsum 兜底
+          images.push('https://picsum.photos/seed/' + String(shopId) + '_r' + i + '_' + j + '/300/300');
+        }
       }
 
       reviews.push({
@@ -500,6 +510,17 @@ const DataModule = (() => {
   }
 
   /**
+   * 提取 POI 真实照片 URL 列表
+   * 高德 photos 格式：[{title, url}, ...] → 提取 url 数组
+   */
+  function extractRealPhotos(poi) {
+    if (poi.photos && poi.photos.length > 0) {
+      return poi.photos.map(function (p) { return p.url; });
+    }
+    return [];
+  }
+
+  /**
    * 将高德 POI 对象转换为标准店铺格式
    * @param {Object} poi - 高德 POI 对象
    * @param {number} userLat - 用户纬度
@@ -513,7 +534,7 @@ const DataModule = (() => {
     var dist = LocationModule.haversineDistance(userLat, userLng, lat, lng);
     var category = mapAmapTypeToCategory(poi.type);
 
-    // 高德评分（若有）或随机生成 3.2-4.9
+    // ✅ 真实评分：优先用高德 biz_ext.rating（around API + detail API 补全后基本都有）
     var rating = 3.8;
     if (poi.biz_ext && poi.biz_ext.rating) {
       rating = parseFloat(poi.biz_ext.rating);
@@ -527,16 +548,22 @@ const DataModule = (() => {
     var baseSales = 8000 - dist * 1200;
     var monthlySales = Math.floor(Math.max(300, baseSales + (Math.random() - 0.5) * 3000));
 
-    // 人均价格（基于分类）
-    var priceMap = {
-      '快餐简餐': [15, 30], '川菜': [30, 60], '湘菜': [28, 50],
-      '粤菜': [35, 70], '面馆': [15, 28], '麻辣烫': [18, 35],
-      '炸鸡小吃': [20, 40], '奶茶饮品': [15, 30], '咖啡': [15, 35],
-      '韩式料理': [30, 55], '日料': [40, 80], '烧烤': [35, 65],
-      '火锅': [50, 100], '烘焙甜点': [20, 45],
-    };
-    var priceRange = priceMap[category] || [20, 40];
-    var avgPrice = Math.floor(priceRange[0] + Math.random() * (priceRange[1] - priceRange[0]));
+    // 人均价格：✅ 优先用高德 biz_ext.cost（真实人均），没有则按分类估算
+    var avgPrice;
+    if (poi.biz_ext && poi.biz_ext.cost) {
+      avgPrice = parseInt(poi.biz_ext.cost) || 0;
+    }
+    if (!avgPrice || avgPrice <= 0) {
+      var priceMap = {
+        '快餐简餐': [15, 30], '川菜': [30, 60], '湘菜': [28, 50],
+        '粤菜': [35, 70], '面馆': [15, 28], '麻辣烫': [18, 35],
+        '炸鸡小吃': [20, 40], '奶茶饮品': [15, 30], '咖啡': [15, 35],
+        '韩式料理': [30, 55], '日料': [40, 80], '烧烤': [35, 65],
+        '火锅': [50, 100], '烘焙甜点': [20, 45],
+      };
+      var priceRange = priceMap[category] || [20, 40];
+      avgPrice = Math.floor(priceRange[0] + Math.random() * (priceRange[1] - priceRange[0]));
+    }
 
     // 配送时间（基于距离）
     var minTime = Math.floor(15 + dist * 4);
@@ -546,8 +573,11 @@ const DataModule = (() => {
     // 配送费
     var deliveryFee = Math.random() > 0.55 ? 0 : Math.floor(Math.random() * 5) + 1;
 
-    // 生成评论和关键词
-    var reviewData = generateReviewsForShop(poi.id || index, category);
+    // ✅ 真实照片（从高德 around API 的 extensions=all 返回，或 detail API 补全）
+    var realPhotos = extractRealPhotos(poi);
+
+    // 生成评论和关键词（传入真实照片用于评论配图）
+    var reviewData = generateReviewsForShop(poi.id || index, category, realPhotos);
 
     return {
       id: 'poi_' + (poi.id || index),
@@ -565,6 +595,7 @@ const DataModule = (() => {
       reviews: reviewData.reviews,
       posKeywords: reviewData.posKeywords,
       negKeywords: reviewData.negKeywords,
+      realPhotos: realPhotos,  // 真实店铺照片（详情页图片网格用）
       isManual: false,
     };
   }

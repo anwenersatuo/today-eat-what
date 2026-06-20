@@ -81,12 +81,21 @@ const App = (() => {
     var allShops = [];
     var pois = [];
 
-    // 1. 从高德获取周边 POI
+    // 1. 从高德获取周边 POI（extensions=all，拿真实评分+照片）
     try {
       pois = await LocationModule.searchNearbyPois(lat, lng, 5);
     } catch (err) {
       console.error('高德POI获取异常：', err);
       pois = [];
+    }
+
+    // 1.5 对没有评分的店铺，批量调用详情 API 补全真实评分+照片
+    if (pois.length > 0) {
+      try {
+        pois = await LocationModule.enrichPois(pois);
+      } catch (err) {
+        console.warn('POI评分补全失败（不影响使用）：', err.message);
+      }
     }
 
     if (pois.length > 0) {
