@@ -82,7 +82,11 @@ const MapPicker = (() => {
       map = null;
     }
 
-    const mapContainer = document.getElementById('mapContainer');
+    var mapContainer = document.getElementById('mapContainer');
+    if (!mapContainer) {
+      console.error('地图容器不存在');
+      return;
+    }
 
     map = L.map(mapContainer, {
       center: DEFAULT_CENTER,
@@ -102,8 +106,14 @@ const MapPicker = (() => {
     // 监听地图移动 → 更新中心地址
     map.on('moveend', updateCenterAddress);
 
-    // 首次加载时更新地址
-    updateCenterAddress();
+    // 🔧 移动端修复：延迟 invalidateSize 确保容器已完成布局
+    // iOS Safari 有时在 flex 布局中初始化地图时尺寸为 0
+    setTimeout(function () {
+      if (map) map.invalidateSize();
+    }, 200);
+
+    // 首次加载时更新地址（先显示坐标，再异步获取地址文字）
+    updateCenterAddressImmediate();
 
     // 绑定事件
     bindMapEvents();
@@ -118,22 +128,31 @@ const MapPicker = (() => {
   }
 
   /**
-   * 更新底部地址显示（防抖）
+   * 🔧 立即显示坐标（不等待地理编码），再异步更新为文字地址
+   * 解决移动网络下 Nominatim API 慢/超时导致"正在获取地址…"永久卡住的问题
+   */
+  function updateCenterAddressImmediate() {
+    var center = getCenter();
+    var addressText = document.getElementById('mapAddressText');
+    // 先立即显示坐标（永不卡住）
+    if (addressText) {
+      addressText.textContent = center.lat.toFixed(4) + ', ' + center.lng.toFixed(4);
+    }
+    // 再异步获取文字地址（成功则替换）
+    LocationModule.reverseGeocode(center.lat, center.lng).then(function (addr) {
+      if (addressText) {
+        addressText.textContent = addr;
+      }
+    });
+  }
+
+  /**
+   * 更新底部地址显示（防抖 300ms）
    */
   function updateCenterAddress() {
-    const center = getCenter();
-
-    // 防抖：300ms 内不再触发
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(async () => {
-      const addressText = document.getElementById('mapAddressText');
-      if (addressText) {
-        addressText.textContent = '正在获取地址…';
-      }
-      const address = await LocationModule.reverseGeocode(center.lat, center.lng);
-      if (addressText) {
-        addressText.textContent = address;
-      }
+    debounceTimer = setTimeout(function () {
+      updateCenterAddressImmediate();
     }, 300);
   }
 

@@ -833,6 +833,9 @@ body {
   display: flex;
   flex-direction: column;
   background: #fff;
+  /* iOS 刘海屏 & 底部指示条安全区 */
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* --- 顶部栏 --- */
@@ -1016,7 +1019,6 @@ body {
 .map-bottom-bar {
   background: #fff;
   padding: 14px 16px;
-  padding-bottom: max(14px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
   box-shadow: 0 -2px 8px rgba(0,0,0,0.04);
   z-index: 10;

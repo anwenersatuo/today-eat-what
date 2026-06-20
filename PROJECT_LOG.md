@@ -128,6 +128,16 @@ data.js → location.js → ranking.js → render.js → map-picker.js → app.j
 - **原因**：只绑了 `input` 事件，没有绑 `keydown` 事件
 - **修复**：在 `map-picker.js` 的 `bindMapEvents()` 中添加 `keydown` 监听，按 Enter 取第一个搜索结果并用 `map.setView()` 跳转
 
+### Bug 3: 手机端地图空白 + 一直显示"正在获取地址…"（2026-06-20 修复）
+- **原因 1**：`fetch()` 无超时机制，Nominatim API 在移动网络下可能永久挂起
+- **原因 2**：`L.map()` 初始化时容器可能尚未完成 CSS 布局（flex 列），尺寸为 0
+- **原因 3**：移动端缺少 iOS 刘海屏/底部指示条安全区适配
+- **修复**：
+  1. `location.js` 新增 `fetchWithTimeout()`，所有 API 调用 8 秒超时
+  2. `map-picker.js` 新增 `updateCenterAddressImmediate()`，先显示坐标再异步获取地址
+  3. `map-picker.js` 初始化后延迟 `invalidateSize()` 200ms
+  4. CSS `.map-picker-container` 增加 `env(safe-area-inset-*)` 适配
+
 ### Bug 2: 红色图钉不居中 / 不可见
 - **原因 1**：用 emoji 📍 渲染，各平台尺寸不一致
 - **原因 2**：z-index 只有 5，被 Leaflet 内部图层（z-index 最高 700）盖住

@@ -12,6 +12,25 @@ const LocationModule = (() => {
   /** 搜索半径（公里） */
   const SEARCH_RADIUS_KM = 5;
 
+  /** API 请求超时时间（毫秒），移动网络可能很慢 */
+  const FETCH_TIMEOUT_MS = 8000;
+
+  /**
+   * 带超时的 fetch 封装
+   * 浏览器原生 fetch 没有超时机制，移动网络下可能永久挂起
+   */
+  function fetchWithTimeout(url, options, timeoutMs) {
+    timeoutMs = timeoutMs || FETCH_TIMEOUT_MS;
+    return Promise.race([
+      fetch(url, options),
+      new Promise(function (_, reject) {
+        setTimeout(function () {
+          reject(new Error('请求超时'));
+        }, timeoutMs);
+      }),
+    ]);
+  }
+
   /** 用户当前位置 */
   let userLocation = null;   // { lat, lng }
   let locationError = null;
@@ -75,15 +94,15 @@ const LocationModule = (() => {
    */
   async function reverseGeocode(lat, lng) {
     try {
-      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=zh`;
-      const resp = await fetch(url, {
+      var url = 'https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&zoom=18&addressdetails=1&accept-language=zh';
+      var resp = await fetchWithTimeout(url, {
         headers: { 'User-Agent': 'TodayEatWhat/1.0' },
       });
-      const data = await resp.json();
-      return data.display_name || `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      var data = await resp.json();
+      return data.display_name || lat.toFixed(4) + ', ' + lng.toFixed(4);
     } catch (err) {
       console.error('反向地理编码失败：', err);
-      return `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+      return lat.toFixed(4) + ', ' + lng.toFixed(4);
     }
   }
 
@@ -94,16 +113,18 @@ const LocationModule = (() => {
    */
   async function geocode(query) {
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=zh`;
-      const resp = await fetch(url, {
+      var url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=5&accept-language=zh';
+      var resp = await fetchWithTimeout(url, {
         headers: { 'User-Agent': 'TodayEatWhat/1.0' },
       });
-      const data = await resp.json();
-      return data.map((item) => ({
-        lat: parseFloat(item.lat),
-        lng: parseFloat(item.lon),
-        name: item.display_name,
-      }));
+      var data = await resp.json();
+      return data.map(function (item) {
+        return {
+          lat: parseFloat(item.lat),
+          lng: parseFloat(item.lon),
+          name: item.display_name,
+        };
+      });
     } catch (err) {
       console.error('地理编码失败：', err);
       return [];
