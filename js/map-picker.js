@@ -130,28 +130,23 @@ const MapPicker = (() => {
   }
 
   /**
-   * 获取红蓝图钉当前位置的具体地址
-   * 不显示经纬度，只显示文字地址或友好提示
+   * 获取红蓝图钉当前位置的具体地址（高德 API，国内秒出）
    */
   function updateCenterAddressImmediate() {
     var center = getCenter();
     var addressText = document.getElementById('mapAddressText');
     if (!addressText) return;
 
-    // 先显示加载状态
-    addressText.textContent = '正在获取地址…';
+    addressText.textContent = '正在识别位置…';
+    addressText.style.color = '';
 
     LocationModule.reverseGeocode(center.lat, center.lng).then(function (addr) {
       if (!addressText) return;
-      // 如果返回的仍是坐标格式，说明获取失败
-      if (addr && /^-?\d+\.\d+,\s*-?\d+\.\d+$/.test(addr.trim())) {
-        addressText.textContent = '📍 选中位置（地址获取失败，请移动地图重试）';
-        addressText.style.color = '#e74c3c';
-      } else if (addr) {
+      if (addr) {
         addressText.textContent = addr;
-        addressText.style.color = ''; // 恢复正常颜色
+        addressText.style.color = '';
       } else {
-        addressText.textContent = '📍 选中位置（地址获取失败）';
+        addressText.textContent = '📍 选中位置（获取失败，请移动地图重试）';
         addressText.style.color = '#e74c3c';
       }
     }).catch(function () {

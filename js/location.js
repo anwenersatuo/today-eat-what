@@ -12,8 +12,11 @@ const LocationModule = (() => {
   /** 搜索半径（公里） */
   const SEARCH_RADIUS_KM = 5;
 
-  /** API 请求超时时间（毫秒），移动网络可能很慢 */
-  const FETCH_TIMEOUT_MS = 8000;
+  /** 高德地图 API Key（Web服务） */
+  var AMAP_KEY = '0a69f733da921a6ab4426116a946dc45';
+
+  /** API 请求超时时间（毫秒） */
+  var FETCH_TIMEOUT_MS = 8000;
 
   /**
    * 带超时的 fetch 封装
@@ -87,59 +90,56 @@ const LocationModule = (() => {
 
   /**
    * 反向地理编码：坐标 → 地址文字
-   * 使用 OpenStreetMap Nominatim（免费）
+   * 使用高德地图 API（国内秒级响应）
    * @param {number} lat
    * @param {number} lng
    * @returns {Promise<string>} 地址文字
    */
   async function reverseGeocode(lat, lng) {
     try {
-      var url = 'https://nominatim.openstreetmap.org/reverse?format=json&lat=' + lat + '&lon=' + lng + '&zoom=18&addressdetails=1&accept-language=zh';
-      var resp = await fetchWithTimeout(url, {
-        headers: { 'User-Agent': 'TodayEatWhat/1.0' },
-      });
+      // 高德 regeo API，location 格式为 "lng,lat"（注意顺序！）
+      var url = 'https://restapi.amap.com/v3/geocode/regeo?key=' + AMAP_KEY +
+        '&location=' + lng + ',' + lat + '&extensions=base';
+      var resp = await fetchWithTimeout(url, {}, 6000);
       var data = await resp.json();
-      if (data.display_name) {
-        return data.display_name;
+      if (data.status === '1' && data.regeocode && data.regeocode.formatted_address) {
+        return data.regeocode.formatted_address;
       }
-      // Nominatim 返回了数据但没有 display_name → 尝试拼接 address 字段
-      if (data.address) {
-        var parts = [];
-        var addr = data.address;
-        if (addr.city || addr.town || addr.county) parts.push(addr.city || addr.town || addr.county);
-        if (addr.district || addr.suburb) parts.push(addr.district || addr.suburb);
-        if (addr.road) parts.push(addr.road);
-        if (addr.house_number) parts.push(addr.house_number);
-        if (parts.length > 0) return parts.join('');
-      }
-      return lat.toFixed(4) + ', ' + lng.toFixed(4);
+      console.error('高德逆地理编码返回异常：', data);
+      return '';
     } catch (err) {
-      console.error('反向地理编码失败：', err);
-      return lat.toFixed(4) + ', ' + lng.toFixed(4);
+      console.error('逆地理编码失败：', err);
+      return '';
     }
   }
 
   /**
-   * 正向地理编码：地址文字 → 坐标
+   * 正向搜索：地址关键词 → 地点列表（含坐标）
+   * 使用高德输入提示 API（搜索即所得，国内秒级响应）
    * @param {string} query
    * @returns {Promise<Array<{lat: number, lng: number, name: string}>>}
    */
   async function geocode(query) {
     try {
-      var url = 'https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query) + '&limit=5&accept-language=zh';
-      var resp = await fetchWithTimeout(url, {
-        headers: { 'User-Agent': 'TodayEatWhat/1.0' },
-      });
+      var url = 'https://restapi.amap.com/v3/assistant/inputtips?key=' + AMAP_KEY +
+        '&keywords=' + encodeURIComponent(query) + '&datatype=all';
+      var resp = await fetchWithTimeout(url, {}, 6000);
       var data = await resp.json();
-      return data.map(function (item) {
-        return {
-          lat: parseFloat(item.lat),
-          lng: parseFloat(item.lon),
-          name: item.display_name,
-        };
-      });
+      if (data.status === '1' && data.tips && data.tips.length > 0) {
+        return data.tips
+          .filter(function (tip) { return tip.location && tip.location.indexOf(',') !== -1; })
+          .map(function (tip) {
+            var parts = tip.location.split(',');
+            return {
+              lat: parseFloat(parts[1]),   // location 格式 "lng,lat"
+              lng: parseFloat(parts[0]),
+              name: tip.name + (tip.address ? ' · ' + tip.address : ''),
+            };
+          });
+      }
+      return [];
     } catch (err) {
-      console.error('地理编码失败：', err);
+      console.error('地理搜索失败：', err);
       return [];
     }
   }
