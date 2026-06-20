@@ -199,28 +199,84 @@ const LocationModule = (() => {
   }
 
   /**
-   * POI 周边搜索：坐标 → 周边餐饮店铺列表
-   * 使用高德周边搜索 API（/v3/place/around）
+   * POI 周边搜索：坐标 → 周边餐饮店铺列表（自动翻页拉全量）
+   *
+   * 高德 /v3/place/around 每页最多返回 25 条（offset 上限=25），
+   * 5km 半径内通常有上百家餐饮店铺。此函数自动翻页，
+   * 并行请求所有页，合并返回全量数据。
+   *
+   * 上限 200 家（8 页），足够随机推荐使用。
+   *
    * @param {number} lat - 中心纬度
    * @param {number} lng - 中心经度
    * @param {number} radiusKm - 搜索半径（公里）
-   * @returns {Promise<Array>} POI 列表
+   * @param {Function} onProgress - 可选，进度回调 (loaded, total)
+   * @returns {Promise<Array>} 全部 POI 列表
    */
-  async function searchNearbyPois(lat, lng, radiusKm) {
+  async function searchNearbyPois(lat, lng, radiusKm, onProgress) {
+    var MAX_SHOPS = 200;        // 最多获取 200 家店铺
+    var PER_PAGE = 25;          // 高德 API 每页上限 25 条
+    var MAX_PAGES = Math.ceil(MAX_SHOPS / PER_PAGE);  // 最多 8 页
+
     try {
-      var url = 'https://restapi.amap.com/v3/place/around?key=' + AMAP_KEY +
+      // 构建基础 URL（不含 page 参数，后续逐页拼接）
+      var baseUrl = 'https://restapi.amap.com/v3/place/around?key=' + AMAP_KEY +
         '&location=' + lng + ',' + lat +
         '&radius=' + Math.round(radiusKm * 1000) +
         '&types=050000' +
-        '&offset=25';
-      var data = await apiRequest(url, 8000);
-      if (data.status === '1' && data.pois && data.pois.length > 0) {
-        return data.pois;
+        '&offset=' + PER_PAGE;
+
+      // 第 1 页：拿到首批数据 + 总数
+      var firstData = await apiRequest(baseUrl + '&page=1', 8000);
+      if (firstData.status !== '1' || !firstData.pois || firstData.pois.length === 0) {
+        if (firstData.status !== '1') {
+          console.warn('高德POI搜索返回异常：', firstData.info || firstData.status);
+        }
+        return [];
       }
-      if (data.status !== '1') {
-        console.warn('高德POI搜索返回异常：', data.info || data.status);
+
+      var allPois = firstData.pois.slice();
+      var totalCount = parseInt(firstData.count) || allPois.length;
+
+      // 计算实际需要翻多少页（不能超过 API 能给的，也不能超过我们的上限）
+      var totalPages = Math.min(Math.ceil(totalCount / PER_PAGE), MAX_PAGES);
+
+      if (onProgress) { onProgress(allPois.length, Math.min(totalCount, MAX_SHOPS)); }
+
+      // 如果只有 1 页，直接返回
+      if (totalPages <= 1) {
+        console.log('高德POI：共 ' + allPois.length + ' 家（仅1页，无需翻页）');
+        return allPois;
       }
-      return [];
+
+      // 并行请求第 2 页到第 N 页（JSONP 也能并行，回调名唯一不冲突）
+      var pageRequests = [];
+      for (var page = 2; page <= totalPages; page++) {
+        pageRequests.push(
+          apiRequest(baseUrl + '&page=' + page, 8000)
+            .catch(function (err) {
+              // 单页失败不影响其他页
+              console.warn('高德POI第' + page + '页请求失败：', err.message);
+              return null;
+            })
+        );
+      }
+
+      var pageResults = await Promise.all(pageRequests);
+
+      // 合并各页结果
+      var mergedCount = allPois.length;
+      pageResults.forEach(function (data) {
+        if (data && data.status === '1' && data.pois) {
+          allPois = allPois.concat(data.pois);
+          mergedCount = allPois.length;
+          if (onProgress) { onProgress(mergedCount, Math.min(totalCount, MAX_SHOPS)); }
+        }
+      });
+
+      console.log('高德POI搜索完成：拉取 ' + allPois.length + ' 家（周边共' + totalCount + '家，翻' + totalPages + '页）');
+      return allPois;
+
     } catch (err) {
       console.error('高德POI搜索失败：', err);
       return [];

@@ -200,7 +200,7 @@ const RenderModule = (() => {
         </div>
         <div class="loading-spinner-wrap">
           <div class="loading-spinner"></div>
-          <p class="loading-text">🔍 正在从高德地图获取周边餐饮店铺…</p>
+          <p class="loading-text">🔍 正在拉取周边 5km 全部餐饮店铺（自动翻页）…</p>
         </div>
       </div>
     `;
