@@ -105,17 +105,10 @@ const RenderModule = (() => {
           '</h1>' +
 
           // 情绪引导文案 — 逐行错落入场
-          '<div class="text-base leading-relaxed mb-8" id="welcomeCopy">' +
+          '<div class="text-base leading-relaxed mb-10" id="welcomeCopy">' +
             '<p class="welcome-copy-line text-[#8C7A6E]" style="animation-delay:0.2s">出去不知道吃什么</p>' +
             '<p class="welcome-copy-line text-[#8C7A6E]" style="animation-delay:0.35s">没关系！！！</p>' +
             '<p class="welcome-copy-line text-[#8C7A6E]" style="animation-delay:0.5s">今天去探索一家好吃的店</p>' +
-          '</div>' +
-
-          // 📸 趣味照片卡片
-          '<div class="mb-8" style="animation:copyFadeUp 0.5s ease-out 0.6s forwards;opacity:0">' +
-            '<div class="inline-block bg-white rounded-xl p-2 shadow-soft rotate-1">' +
-              '<img src="images/photo-friend.jpg" class="w-44 h-44 object-cover rounded-lg" alt="photo" />' +
-            '</div>' +
           '</div>' +
 
           // 🎲 核心 CTA — 呼吸发光动画
